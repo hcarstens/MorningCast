@@ -159,6 +159,135 @@ const TENSION_PATTERNS: TensionPattern[] = [
   },
 ];
 
+type TarotOrientation = "upright" | "soft";
+
+type TarotCard = {
+  name: string;
+  arcana: "Major" | "Wands" | "Cups" | "Swords" | "Pentacles";
+  element: "Air" | "Water" | "Fire" | "Earth";
+  upright: string;
+  soft: string;
+};
+
+const TAROT_CARDS: TarotCard[] = [
+  {
+    name: "The Star",
+    arcana: "Major",
+    element: "Air",
+    upright: "steadied your quiet optimism",
+    soft: "asked for a gentle refill of hope",
+  },
+  {
+    name: "Strength",
+    arcana: "Major",
+    element: "Fire",
+    upright: "showed how patience tames effort",
+    soft: "invited you to soften self-pressure",
+  },
+  {
+    name: "Temperance",
+    arcana: "Major",
+    element: "Water",
+    upright: "blended your aims into calm balance",
+    soft: "nudged you to pace each pour of energy",
+  },
+  {
+    name: "The Chariot",
+    arcana: "Major",
+    element: "Fire",
+    upright: "kept momentum aligned with intention",
+    soft: "suggested a course correction made kindly",
+  },
+  {
+    name: "The Lovers",
+    arcana: "Major",
+    element: "Air",
+    upright: "highlighted heartfelt collaboration",
+    soft: "asked for a thoughtful mutual check-in",
+  },
+  {
+    name: "Ace of Cups",
+    arcana: "Cups",
+    element: "Water",
+    upright: "opened space for fresh compassion",
+    soft: "reminded you to refill emotional reserves",
+  },
+  {
+    name: "Two of Wands",
+    arcana: "Wands",
+    element: "Fire",
+    upright: "charted confident expansion",
+    soft: "encouraged drafting kinder milestones",
+  },
+  {
+    name: "Three of Pentacles",
+    arcana: "Pentacles",
+    element: "Earth",
+    upright: "built trust through shared craft",
+    soft: "suggested revisiting the plan with care",
+  },
+  {
+    name: "Six of Wands",
+    arcana: "Wands",
+    element: "Fire",
+    upright: "celebrated a visible win",
+    soft: "requested humble pride in progress",
+  },
+  {
+    name: "Page of Cups",
+    arcana: "Cups",
+    element: "Water",
+    upright: "welcomed playful curiosity",
+    soft: "asked you to listen for tender signals",
+  },
+  {
+    name: "Queen of Swords",
+    arcana: "Swords",
+    element: "Air",
+    upright: "clarified the question with grace",
+    soft: "invited kinder internal dialogue",
+  },
+  {
+    name: "Six of Pentacles",
+    arcana: "Pentacles",
+    element: "Earth",
+    upright: "balanced giving with receptive ease",
+    soft: "suggested redistributing effort fairly",
+  },
+];
+
+const TAROT_POSITIONS = [
+  { key: "past", label: "Past" },
+  { key: "present", label: "Focus" },
+  { key: "future", label: "Foreshadow" },
+];
+
+type TarotSpreadCard = {
+  position: string;
+  card: TarotCard;
+  orientation: TarotOrientation;
+};
+
+function drawTarotSpread(rand: () => number): TarotSpreadCard[] {
+  const pool = [...TAROT_CARDS];
+  return TAROT_POSITIONS.map(({ label }) => {
+    const index = Math.floor(rand() * pool.length);
+    const [card] = pool.splice(index, 1);
+    const orientation: TarotOrientation = rand() < 0.28 ? "soft" : "upright";
+    return {
+      position: label,
+      card,
+      orientation,
+    };
+  });
+}
+
+function formatTarotLine(spreadCard: TarotSpreadCard): string {
+  const tone = spreadCard.orientation === "upright" ? spreadCard.card.upright : spreadCard.card.soft;
+  const orientationLabel = spreadCard.orientation === "soft" ? " (soft)" : "";
+  return `${spreadCard.position} · ${spreadCard.card.name}${orientationLabel} ${tone}.`;
+}
+
 function getDayPhase(date: Date): DayPhaseInfo {
   const hour = date.getHours();
   if (hour < 6) return { key: "dawn", futureWindow: "late morning" };
@@ -244,6 +373,13 @@ const FLAVORS: Record<SingleSign, string[]> = {
   ],
 };
 
+const SIGN_ADVICE: Record<SingleSign, string> = {
+  Love: "offering one clear kindness",
+  Fortune: "tracking the next promising step",
+  Fame: "sharing your craft with steady pride",
+  Adventure: "choosing the curious route today",
+};
+
 // --- Generation logic --- //
 function pick<T>(rand: () => number, arr: T[]): T {
   return arr[Math.floor(rand() * arr.length)];
@@ -314,23 +450,31 @@ function generateHoroscopeReading(
   };
 }
 
-function generateReading(
+function generateTarotReading(
   rand: () => number,
-  divinator: Divinator,
   profile: Profile,
-  readingMoment: Date,
-  birthMoment: Date | null
+  horoscope: Reading
 ): Reading {
-  if (divinator === "Horoscope") {
-    return generateHoroscopeReading(rand, profile, readingMoment, birthMoment);
-  }
+  const spread = drawTarotSpread(rand);
+  const sign = chooseSignForDivinator(rand, "Tarot", profile.intention);
+  const flavor = spread.map((card) => formatTarotLine(card)).join(" ");
+  const detail = `Echo your horoscope ${horoscope.sign.toLowerCase()} focus by ${SIGN_ADVICE[horoscope.sign]}.`;
 
-  const sign = chooseSignForDivinator(rand, divinator, profile.intention);
-  const icon = divinator === "Tarot" ? "♠︎" : "☯";
-  const headline = `${icon} ${divinator} suggests ${sign}`;
+  return {
+    divinator: "Tarot",
+    headline: `♠︎ Tarot maps ${sign}`,
+    flavor,
+    sign,
+    detail,
+  };
+}
+
+function generateIChingReading(rand: () => number, profile: Profile): Reading {
+  const sign = chooseSignForDivinator(rand, "I Ching", profile.intention);
+  const headline = `☯ I Ching steadies ${sign}`;
   const flavor = pick(rand, FLAVORS[sign]);
 
-  return { divinator, headline, flavor, sign };
+  return { divinator: "I Ching", headline, flavor, sign };
 }
 
 function combineToSingleSign(readings: Reading[], rand: () => number, focus: Profile["focus"]): SingleSign {
@@ -386,11 +530,10 @@ export default function DailyDivinationApp() {
   const rand = useMemo(() => seededRandom(seedKey), [seedKey]);
 
   const readings = useMemo(() => {
-    return [
-      generateReading(rand, "Horoscope", profile, readingMoment, birthMoment),
-      generateReading(rand, "Tarot", profile, readingMoment, birthMoment),
-      generateReading(rand, "I Ching", profile, readingMoment, birthMoment),
-    ];
+    const horoscope = generateHoroscopeReading(rand, profile, readingMoment, birthMoment);
+    const tarot = generateTarotReading(rand, profile, horoscope);
+    const iching = generateIChingReading(rand, profile);
+    return [horoscope, tarot, iching];
   }, [rand, profile, readingMoment, birthMoment]);
 
   const singleSign = useMemo(() => combineToSingleSign(readings, rand, profile.focus), [readings, rand, profile.focus]);
