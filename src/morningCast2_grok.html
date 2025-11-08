@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Triad Oracle • Live</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;700&family=Playfair+Display&display=swap');
+  body {
+    margin: 0; padding: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1a0033, #330066, #660033);
+    color: #f0e6ff;
+    font-family: 'Cormorant Garamond', serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow-x: hidden;
+  }
+  .container { max-width: 420px; width: 90%; text-align: center; padding: 20px; }
+  h1 { font-family: 'Playfair Display', serif; font-size: 3rem; margin-bottom: 8px; }
+  .subtitle { opacity: 0.8; margin-bottom: 30px; font-size: 1.1rem; }
+  .divinators { display: flex; flex-direction: column; gap: 22px; margin: 40px 0; }
+  .card {
+    background: rgba(255,255,255,0.12);
+    border-radius: 18px;
+    padding: 22px;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.25);
+    transition: all 0.3s;
+  }
+  .card:hover { transform: translateY(-6px); box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
+  .card h3 { margin: 0 0 12px; font-size: 1.5rem; }
+  .card .icon { font-size: 3.2rem; margin-bottom: 12px; }
+  .final-sign { margin: 50px 0; font-size: 5rem; animation: pulse 3s infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  .btn {
+    position: fixed; bottom: 30px; right: 30px;
+    background: #ff33cc; color: white; border: none;
+    border-radius: 50%; width: 72px; height: 72px;
+    font-size: 2.2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    cursor: pointer; transition: all 0.3s;
+  }
+  .btn:hover { transform: scale(1.15); background: #ff0099; }
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; z-index: 100; }
+  .modal-content {
+    background: #220044; padding: 35px; border-radius: 24px;
+    width: 90%; max-width: 400px; border: 2px solid #ff66cc;
+  }
+  input, select { width: 100%; padding: 14px; margin: 12px 0; border: none; border-radius: 10px; background: rgba(255,255,255,0.2); color: white; font-size: 1rem; }
+  .close { float: right; font-size: 2.4rem; cursor: pointer; }
+  .loading { opacity: 0.6; font-style: italic; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Triad Oracle</h1>
+    <p class="subtitle">Live readings from the cosmos</p>
+    
+    <div class="divinators">
+      <div class="card" id="horoscope">
+        <div class="icon">♈</div>
+        <h3>Horoscope</h3>
+        <p id="horo-text" class="loading">Consulting the stars...</p>
+      </div>
+      
+      <div class="card" id="tarot">
+        <div class="icon">🃏</div>
+        <h3>Tarot</h3>
+        <p id="tarot-text" class="loading">Shuffling the deck...</p>
+      </div>
+      
+      <div class="card" id="iching">
+        <div class="icon">⚲</div>
+        <h3>I Ching</h3>
+        <p id="iching-text" class="loading">Tossing ancient coins...</p>
+      </div>
+    </div>
+    
+    <div class="final-sign" id="sign">?</div>
+    <p id="sign-meaning">Your cosmic sign is aligning...</p>
+  </div>
+  
+  <button class="btn" id="personalize">✨</button>
+  
+  <!-- Modal -->
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <span class="close">×</span>
+      <h2>Personalize Your Oracle</h2>
+      <input type="text" id="name" placeholder="Your name (optional)">
+      <select id="zodiac">
+        <option value="">Select Zodiac Sign</option>
+        <option>Aries</option><option>Taurus</option><option>Gemini</option>
+        <option>Cancer</option><option>Leo</option><option>Virgo</option>
+        <option>Libra</option><option>Scorpio</option><option>Sagittarius</option>
+        <option>Capricorn</option><option>Aquarius</option><option>Pisces</option>
+      </select>
+      <input type="date" id="birthdate" placeholder="Birth date">
+      <button onclick="saveAndReload()" style="margin-top:20px; padding:14px; width:100%; background:#ff3399; border:none; border-radius:10px; color:white; font-size:1.2rem;">Save & Reveal</button>
+    </div>
+  </div>
+
+<!-- Live APIs -->
+<script src="https://cdn.jsdelivr.net/npm/iching@2.0.2/dist/iching.min.js"></script>
+<script>
+const signs = { love: "❤️ LOVE ❤️", fortune: "💰 FORTUNE 💰", fame: "⭐ FAME ⭐", adventure: "🗺️ ADVENTURE 🗺️" };
+const signMeanings = {
+  love: "The universe opens hearts. Deep bonds form effortlessly today.",
+  fortune: "Abundance flows like a river. Watch for golden opportunities.",
+  fame: "Spotlights find you. Your presence commands attention.",
+  adventure: "A portal opens. Step through—destiny has wild plans."
+};
+
+const zodiacIcons = '♈♉♊♋♌♍♎♏♐♑♒♓';
+const zodiacList = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
+
+// Seeded RNG for daily consistency
+function seededRandom(seed) {
+  let h = seed.split('').reduce((a,b) => a + b.charCodeAt(0), 0);
+  return () => {
+    h = (h * 16807) % 2147483647;
+    return (h - 1) / 2147483646;
+  };
+}
+
+function getTodaySeed() {
+  const p = JSON.parse(localStorage.getItem('triad_personal') || '{}');
+  const date = new Date().toISOString().slice(0,10);
+  return date + (p.zodiac || '') + (p.name || '') + (p.birthdate || '');
+}
+
+// Main reading function
+async function generateLiveReadings() {
+  const p = JSON.parse(localStorage.getItem('triad_personal') || '{}');
+  const zodiac = p.zodiac || zodiacList[Math.floor(Math.random()*12)];
+  const seed = getTodaySeed();
+  const rand = seededRandom(seed);
+
+  // Update zodiac icon
+  document.querySelector('#horoscope .icon').textContent = zodiacIcons[zodiacList.indexOf(zodiac)];
+
+  // 1. Live Horoscope
+  try {
+    const horoRes = await fetch(`https://aztro.sameerkumar.dev/?sign=${zodiac.toLowerCase()}&day=today`);
+    const horo = await horoRes.json();
+    document.getElementById('horo-text').innerHTML = `<strong>${zodiac}</strong><br>${horo.description}`;
+  } catch(e) {
+    document.getElementById('horo-text').textContent = "The stars are shy today...";
+  }
+
+  // 2. Live Tarot
+  try {
+    const tarotRes = await fetch('https://tarotapi.dev/api/v1/cards/random?n=1');
+    const [card] = await tarotRes.json();
+    const orientation = rand() > 0.5 ? "upright" : "reversed";
+    const meaning = orientation === "upright" ? card.meaning_up : card.meaning_rev;
+    document.getElementById('tarot-text').innerHTML = `<strong>${card.name}</strong> (${orientation})<br><em>${meaning}</em>`;
+  } catch(e) {
+    document.getElementById('tarot-text').textContent = "The cards are resting...";
+  }
+
+  // 3. Live I Ching (client-side)
+  const reading = iching.cast();
+  const hex = reading.hexagram;
+  const changing = reading.changingLines.length > 0 ? ` → ${reading.transformed.number} ${reading.transformed.name}` : "";
+  document.getElementById('iching-text').innerHTML = `<strong>${hex.number}. ${hex.name}</strong>${changing}<br>${hex.meaning}`;
+
+  // 4. Final Sign
+  const hash = zodiac.charCodeAt(0) + hex.number + (reading.changingLines[0] || 0);
+  const finalKey = ['love','fortune','fame','adventure'][hash % 4];
+  document.getElementById('sign').textContent = signs[finalKey];
+  document.getElementById('sign-meaning').textContent = signMeanings[finalKey];
+}
+
+// Personalization
+document.getElementById('personalize').onclick = () => {
+  document.getElementById('modal').style.display = 'flex';
+  const p = JSON.parse(localStorage.getItem('triad_personal') || '{}');
+  document.getElementById('name').value = p.name || '';
+  document.getElementById('zodiac').value = p.zodiac || '';
+  document.getElementById('birthdate').value = p.birthdate || '';
+};
+
+document.querySelector('.close').onclick = () => {
+  document.getElementById('modal').style.display = 'none';
+};
+
+function saveAndReload() {
+  const data = {
+    name: document.getElementById('name').value.trim(),
+    zodiac: document.getElementById('zodiac').value,
+    birthdate: document.getElementById('birthdate').value
+  };
+  localStorage.setItem('triad_personal', JSON.stringify(data));
+  document.getElementById('modal').style.display = 'none';
+  location.reload();
+}
+
+// Init
+window.onload = () => {
+  generateLiveReadings();
+  if (!localStorage.getItem('triad_personal')) {
+    setTimeout(() => document.getElementById('modal').style.display = 'flex', 1200);
+  }
+};
+</script>
+</body>
+</html>
