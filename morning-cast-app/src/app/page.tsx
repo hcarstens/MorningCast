@@ -349,36 +349,229 @@ function inferSignFromIntention(intention: string): SingleSign | null {
   return null;
 }
 
-// --- Sample flavor text pools --- //
-const FLAVORS: Record<SingleSign, string[]> = {
-  Love: [
-    "A gentle nudge opens a heartfelt door.",
-    "Connection ripples from a small kindness.",
-    "Old sparks meet new patience.",
-  ],
-  Fortune: [
-    "A tidy ledger invites a lucky line.",
-    "The right ask finds the right ear.",
-    "Chance prefers prepared lists.",
-  ],
-  Fame: [
-    "Your name rides a favorable breeze.",
-    "A spotlight finds craft, not noise.",
-    "Consistency becomes a calling card.",
-  ],
-  Adventure: [
-    "A detour hides the best view.",
-    "Say yes to the map’s smudge.",
-    "Curiosity hands you sturdy boots.",
-  ],
-};
-
 const SIGN_ADVICE: Record<SingleSign, string> = {
   Love: "offering one clear kindness",
   Fortune: "tracking the next promising step",
   Fame: "sharing your craft with steady pride",
   Adventure: "choosing the curious route today",
 };
+
+type LineShift = "yin-to-yang" | "yang-to-yin";
+
+type HexagramTransition = {
+  to: number;
+  line: number;
+  shift: LineShift;
+  counsel: string;
+  bias: SingleSign;
+};
+
+type HexagramProfile = {
+  number: number;
+  name: string;
+  image: string;
+  focus: SingleSign[];
+  attribute: string;
+  action: string;
+  transitions: HexagramTransition[];
+};
+
+const HEXAGRAMS = {
+  11: {
+    number: 11,
+    name: "Peace",
+    image: "earth above heaven",
+    focus: ["Love", "Fortune"],
+    attribute: "balance rooted in shared ease",
+    action: "welcoming calm reciprocity",
+    transitions: [
+      {
+        to: 32,
+        line: 2,
+        shift: "yin-to-yang",
+        counsel: "Commit gently to what keeps the channel steady.",
+        bias: "Fortune",
+      },
+      {
+        to: 24,
+        line: 6,
+        shift: "yang-to-yin",
+        counsel: "Close the cycle softly so the next return stays warm.",
+        bias: "Love",
+      },
+    ],
+  },
+  14: {
+    number: 14,
+    name: "Great Possession",
+    image: "fire above heaven",
+    focus: ["Fortune", "Fame"],
+    attribute: "abundance stewarded with nobility",
+    action: "sharing spotlight to uplift the circle",
+    transitions: [
+      {
+        to: 32,
+        line: 1,
+        shift: "yin-to-yang",
+        counsel: "Anchor resources in rhythms that respect timing.",
+        bias: "Fortune",
+      },
+      {
+        to: 50,
+        line: 5,
+        shift: "yang-to-yin",
+        counsel: "Use your spotlight to nourish quieter voices.",
+        bias: "Fame",
+      },
+    ],
+  },
+  24: {
+    number: 24,
+    name: "Returning",
+    image: "earth above thunder",
+    focus: ["Adventure", "Fortune"],
+    attribute: "renewal sparked by heartfelt return",
+    action: "re-entering the cycle with mindful gratitude",
+    transitions: [
+      {
+        to: 46,
+        line: 1,
+        shift: "yin-to-yang",
+        counsel: "Step back in with optimism; the ground remembers you.",
+        bias: "Adventure",
+      },
+      {
+        to: 14,
+        line: 4,
+        shift: "yang-to-yin",
+        counsel: "Bring the lesson home and share the gains lightly.",
+        bias: "Fortune",
+      },
+    ],
+  },
+  31: {
+    number: 31,
+    name: "Influence",
+    image: "lake above mountain",
+    focus: ["Love", "Fame"],
+    attribute: "influence born from receptive warmth",
+    action: "listening for resonance before moving",
+    transitions: [
+      {
+        to: 46,
+        line: 2,
+        shift: "yin-to-yang",
+        counsel: "Accept help and rise together, not alone.",
+        bias: "Adventure",
+      },
+      {
+        to: 11,
+        line: 4,
+        shift: "yang-to-yin",
+        counsel: "Ease the pace so harmony can settle in.",
+        bias: "Love",
+      },
+    ],
+  },
+  32: {
+    number: 32,
+    name: "Lasting",
+    image: "thunder above wind",
+    focus: ["Fortune", "Adventure"],
+    attribute: "steadiness that keeps promises breathing",
+    action: "keeping rhythm without forcing",
+    transitions: [
+      {
+        to: 53,
+        line: 1,
+        shift: "yang-to-yin",
+        counsel: "Start with a quiet pledge and let trust accrue.",
+        bias: "Adventure",
+      },
+      {
+        to: 14,
+        line: 4,
+        shift: "yin-to-yang",
+        counsel: "Share your steadiness so abundance can circulate.",
+        bias: "Fortune",
+      },
+    ],
+  },
+  46: {
+    number: 46,
+    name: "Pushing Upward",
+    image: "earth above wind",
+    focus: ["Adventure", "Fame"],
+    attribute: "gentle ascent supported by trust",
+    action: "inviting cooperation for each step",
+    transitions: [
+      {
+        to: 11,
+        line: 3,
+        shift: "yin-to-yang",
+        counsel: "Gather allies before the next lift; shared patience brings balance.",
+        bias: "Love",
+      },
+      {
+        to: 53,
+        line: 5,
+        shift: "yin-to-yang",
+        counsel: "Keep climbing with kindness—the path opens slowly.",
+        bias: "Adventure",
+      },
+    ],
+  },
+  50: {
+    number: 50,
+    name: "The Cauldron",
+    image: "fire above wood",
+    focus: ["Fame", "Love"],
+    attribute: "craft that transforms care into nourishment",
+    action: "tending the shared vessel with sincerity",
+    transitions: [
+      {
+        to: 31,
+        line: 2,
+        shift: "yin-to-yang",
+        counsel: "Let sincere offerings draw the right collaborators.",
+        bias: "Fame",
+      },
+      {
+        to: 14,
+        line: 4,
+        shift: "yang-to-yin",
+        counsel: "Simplify the recipe so abundance feels shared.",
+        bias: "Fortune",
+      },
+    ],
+  },
+  53: {
+    number: 53,
+    name: "Gradual Progress",
+    image: "wind above mountain",
+    focus: ["Adventure", "Love"],
+    attribute: "patience that lets progress unfurl",
+    action: "letting each stage ripen naturally",
+    transitions: [
+      {
+        to: 31,
+        line: 3,
+        shift: "yin-to-yang",
+        counsel: "Lead with listening; influence follows patient presence.",
+        bias: "Love",
+      },
+      {
+        to: 50,
+        line: 5,
+        shift: "yang-to-yin",
+        counsel: "Refine what you offer so it nourishes everyone.",
+        bias: "Fame",
+      },
+    ],
+  },
+} satisfies Record<number, HexagramProfile>;
+
+const HEXAGRAM_LIST: HexagramProfile[] = Object.values(HEXAGRAMS);
 
 // --- Generation logic --- //
 function pick<T>(rand: () => number, arr: T[]): T {
@@ -469,12 +662,41 @@ function generateTarotReading(
   };
 }
 
-function generateIChingReading(rand: () => number, profile: Profile): Reading {
-  const sign = chooseSignForDivinator(rand, "I Ching", profile.intention);
-  const headline = `☯ I Ching steadies ${sign}`;
-  const flavor = pick(rand, FLAVORS[sign]);
+function prioritizeTransitions(
+  transitions: HexagramTransition[],
+  horoscopeSign: SingleSign,
+  tarotSign: SingleSign
+): HexagramTransition[] {
+  const aligned = transitions.filter(
+    (transition) => transition.bias === horoscopeSign || transition.bias === tarotSign
+  );
+  return aligned.length ? aligned : transitions;
+}
 
-  return { divinator: "I Ching", headline, flavor, sign };
+function generateIChingReading(
+  rand: () => number,
+  profile: Profile,
+  horoscope: Reading,
+  tarot: Reading
+): Reading {
+  const sign = chooseSignForDivinator(rand, "I Ching", profile.intention);
+  const relevantHexagrams = HEXAGRAM_LIST.filter((hex) => hex.focus.includes(sign));
+  const primary = relevantHexagrams.length ? pick(rand, relevantHexagrams) : pick(rand, HEXAGRAM_LIST);
+  const transitionPool = prioritizeTransitions(primary.transitions, horoscope.sign, tarot.sign);
+  const transition = pick(rand, transitionPool);
+  const future = HEXAGRAMS[transition.to];
+  const movement = transition.shift === "yin-to-yang" ? "yin → yang" : "yang → yin";
+  const movementTone =
+    transition.shift === "yin-to-yang" ? "inviting gentle action" : "returning to calm receptivity";
+  const headline = `☯ ${primary.name} → ${future.name} (${sign})`;
+  const flavor = `“${primary.number} ${primary.name}” (${primary.image}) affirms ${primary.attribute}. Line ${
+    transition.line
+  } shifts ${movement}—${movementTone}—forming “${future.number} ${future.name}”. ${transition.counsel}`;
+  const detail = `Let the horoscope’s ${horoscope.sign.toLowerCase()} framing and the Tarot’s ${tarot.sign.toLowerCase()} map steady this ${sign.toLowerCase()} focus. Honor the natural pace by ${
+    future.action
+  }, allowing the shift to ripen before the next move.`;
+
+  return { divinator: "I Ching", headline, flavor, sign, detail };
 }
 
 function combineToSingleSign(readings: Reading[], rand: () => number, focus: Profile["focus"]): SingleSign {
@@ -532,7 +754,7 @@ export default function DailyDivinationApp() {
   const readings = useMemo(() => {
     const horoscope = generateHoroscopeReading(rand, profile, readingMoment, birthMoment);
     const tarot = generateTarotReading(rand, profile, horoscope);
-    const iching = generateIChingReading(rand, profile);
+    const iching = generateIChingReading(rand, profile, horoscope, tarot);
     return [horoscope, tarot, iching];
   }, [rand, profile, readingMoment, birthMoment]);
 
