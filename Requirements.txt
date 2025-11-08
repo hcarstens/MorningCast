@@ -1,136 +1,120 @@
-Absolutely. Here are two easy ways to get it running in VSCode.
+# MorningCast Requirements
 
-# Option A (recommended): Next.js + Tailwind + shadcn/ui
+## Prerequisites
 
-This matches the prototype’s imports (`@/components/ui/...`) out of the box.
+- **Node.js**: v18+ (tested with v25.1.0)
+- **npm**: v8+ (tested with v11.6.2)
+- **macOS/Linux/Windows**: Cross-platform compatible
 
-1. **Scaffold the app**
+## Quick Start
 
-```bash
-npx create-next-app@latest daily-divination --typescript --tailwind --eslint
-cd daily-divination
-```
-
-2. **Initialize shadcn/ui**
+The app is already set up in the `morning-cast-app/` directory. To run:
 
 ```bash
-npx shadcn@latest init -d
-```
-
-3. **Add the components the prototype uses**
-
-```bash
-npx shadcn@latest add button card input label sheet select textarea badge
-```
-
-4. **Install extras**
-
-```bash
-npm i framer-motion lucide-react
-```
-
-5. **Open in VSCode**
-
-```bash
-code .
-```
-
-6. **Drop in the code**
-
-* Open `app/page.tsx` (or create a new route if you prefer).
-* Paste the prototype code I put in the canvas.
-* It uses the `@/components/ui/*` paths that shadcn just generated.
-
-7. **Run it**
-
-```bash
+cd morning-cast-app
 npm run dev
 ```
 
-Then visit `http://localhost:3000`.
+Then visit `http://localhost:3000`
 
----
+## Dependencies
 
-# Option B: Vite + React + Tailwind (works fine too)
+### Core Framework
+- **Next.js 15**: React framework with App Router
+- **React 19**: UI library
+- **TypeScript**: Type safety
+- **Tailwind CSS**: Utility-first styling
 
-If you prefer Vite, just add a small alias so `@/...` resolves to `src/...`.
+### UI Components
+- **shadcn/ui**: Pre-built component library
+  - button, card, input, label, sheet, select, textarea, badge
+- **Lucide React**: Icon library
+- **Framer Motion**: Smooth animations
 
-1. **Scaffold**
+### Development Tools
+- **ESLint**: Code linting
+- **PostCSS**: CSS processing
+- **Autoprefixer**: CSS vendor prefixes
+
+## Project Structure
+
+```
+MorningCast/
+├── morning-cast-app/          # Next.js application
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── page.tsx       # Main divination app
+│   │   │   ├── layout.tsx     # Root layout
+│   │   │   └── globals.css    # Global styles
+│   │   ├── components/ui/     # shadcn/ui components
+│   │   └── lib/utils.ts       # Utility functions
+│   ├── package.json           # Dependencies
+│   └── tailwind.config.ts     # Tailwind configuration
+├── src/                       # Original prototype files
+├── Heuristics*.md             # Divination system documentation
+└── morningCastWorkflow.json   # Theoretical framework
+```
+
+## Installation from Scratch
+
+If you need to recreate the environment:
 
 ```bash
-npm create vite@latest daily-divination -- --template react-ts
-cd daily-divination
-```
+# Install Node.js (macOS)
+brew install node
 
-2. **Tailwind setup**
+# Create Next.js project
+npx create-next-app@latest morning-cast-app --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
+cd morning-cast-app
 
-```bash
-npm i -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
-```
-
-* In `tailwind.config.js` set:
-
-```js
-content: ["./index.html", "./src/**/*.{ts,tsx}"]
-```
-
-* In `src/index.css` add:
-
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
-
-3. **shadcn/ui + components**
-
-```bash
-npm i class-variance-authority tailwind-merge tailwindcss-animate lucide-react framer-motion
+# Initialize shadcn/ui
 npx shadcn@latest init -d
+
+# Add UI components
 npx shadcn@latest add button card input label sheet select textarea badge
-```
 
-4. **Add an alias for `@/`**
+# Install additional dependencies
+npm install framer-motion lucide-react
 
-* In `tsconfig.json`:
-
-```json
-{
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
-  }
-}
-```
-
-* (Optional) In `vite.config.ts`:
-
-```ts
-import path from "path";
-resolve: { alias: { "@": path.resolve(__dirname, "src") } }
-```
-
-5. **Create the app file**
-
-* Replace `src/App.tsx` with the canvas code.
-* Ensure the imports like `@/components/ui/button` exist (they will after `shadcn add`).
-
-6. **Run**
-
-```bash
+# Start development server
 npm run dev
 ```
 
-Visit `http://localhost:5173`.
+## Features
 
----
+- **Daily Divination**: Combines Horoscope, Tarot, and I Ching readings
+- **Personalization**: Name, birthdate, favorite number, intention, and theme
+- **Deterministic Randomness**: Consistent daily readings using seeded PRNG
+- **Responsive Design**: Works on desktop and mobile
+- **Local Storage**: Preferences saved in browser
+- **Three Themes**: Serene, Mystic, and Bold color schemes
 
-## Quick troubleshooting
+## Environment Configuration
 
-* **UI imports not found**: Re-run the `shadcn add ...` commands (Next.js: they land in `components/ui`; Vite: in `src/components/ui`).
-* **Tailwind classes don’t render**: confirm Tailwind content globs cover your files and you added `@tailwind base; @tailwind components; @tailwind utilities;`.
-* **Path alias `@/` not resolving (Vite)**: verify `tsconfig.json` paths and (if needed) the Vite alias in `vite.config.ts`.
-* **Node version**: use Node 18+.
+The project includes comprehensive environment configuration:
 
-If you tell me which route you’re taking (Next.js or Vite), I’ll tailor the files (e.g., exact `page.tsx` for Next.js or `App.tsx` for Vite) so you can paste-and-go.
+- **`.env`**: Default application settings and feature flags
+- **`.env.local.example`**: Template for local development overrides
+- **`morning-cast-app/.env`**: Next.js-specific configuration
+
+### Customization
+Copy `.env.local.example` to `.env.local` and modify as needed:
+
+```bash
+cp .env.local.example .env.local
+# Edit .env.local with your preferences
+```
+
+Key settings:
+- `NEXT_PUBLIC_DEFAULT_THEME`: Default visual theme (Serene/Mystic/Bold)
+- `NEXT_PUBLIC_SHOW_SEED_DEBUG`: Show/hide debug information
+- `NEXT_PUBLIC_ENABLE_ANIMATIONS`: Enable/disable UI animations
+- `PORT`: Development server port (default: 3000)
+
+## Troubleshooting
+
+- **Port 3000 in use**: Change port with `npm run dev -- -p 3001` or set `PORT=3001` in `.env.local`
+- **Build errors**: Ensure Node.js v18+ and all dependencies installed
+- **UI components missing**: Re-run `npx shadcn@latest add [component-name]`
+- **Styles not loading**: Verify Tailwind CSS is properly configured
+- **Environment issues**: Check `.env` files are properly formatted (no spaces around =)

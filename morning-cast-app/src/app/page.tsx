@@ -1,0 +1,350 @@
+//GuideMyDay
+
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CalendarDays, Sparkles, Wand2, Compass, Settings2, Heart, Star, TrendingUp, Map } from "lucide-react";
+
+// --- Utility: deterministic PRNG seeded by string (Mulberry32) --- //
+function xmur3(str: string) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function () {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return h >>> 0;
+  };
+}
+function mulberry32(a: number) {
+  return function () {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seededRandom(seed: string) {
+  const seedFn = xmur3(seed);
+  return mulberry32(seedFn());
+}
+
+// --- Types --- //
+const SIGNS = ["Love", "Fortune", "Fame", "Adventure"] as const;
+export type SingleSign = typeof SIGNS[number];
+export type Divinator = "Horoscope" | "Tarot" | "I Ching";
+
+interface Reading {
+  divinator: Divinator;
+  headline: string;
+  flavor: string;
+  sign: SingleSign;
+  detail?: string;
+}
+
+interface Profile {
+  name: string;
+  birthdate: string; // ISO yyyy-mm-dd
+  favoriteNumber: string;
+  focus: SingleSign | "Auto";
+  intention: string;
+  theme: "Serene" | "Mystic" | "Bold";
+}
+
+// --- Simple theming --- //
+const themeToGradient: Record<Profile["theme"], string> = {
+  Serene: "from-slate-900 via-slate-800 to-slate-900",
+  Mystic: "from-violet-900 via-fuchsia-900 to-indigo-900",
+  Bold: "from-zinc-900 via-neutral-900 to-zinc-900",
+};
+
+// --- Sample flavor text pools --- //
+const FLAVORS: Record<SingleSign, string[]> = {
+  Love: [
+    "A gentle nudge opens a heartfelt door.",
+    "Connection ripples from a small kindness.",
+    "Old sparks meet new patience.",
+  ],
+  Fortune: [
+    "A tidy ledger invites a lucky line.",
+    "The right ask finds the right ear.",
+    "Chance prefers prepared lists.",
+  ],
+  Fame: [
+    "Your name rides a favorable breeze.",
+    "A spotlight finds craft, not noise.",
+    "Consistency becomes a calling card.",
+  ],
+  Adventure: [
+    "A detour hides the best view.",
+    "Say yes to the map's smudge.",
+    "Curiosity hands you sturdy boots.",
+  ],
+};
+
+// --- Generation logic --- //
+function pick<T>(rand: () => number, arr: T[]): T {
+  return arr[Math.floor(rand() * arr.length)];
+}
+
+function generateReading(rand: () => number, divinator: Divinator): Reading {
+  // Base tilt by divinator
+  const bias: Partial<Record<SingleSign, number>> =
+    divinator === "Horoscope"
+      ? { Love: 0.3, Fortune: 0.25, Fame: 0.2, Adventure: 0.25 }
+      : divinator === "Tarot"
+      ? { Love: 0.25, Fortune: 0.2, Fame: 0.35, Adventure: 0.2 }
+      : { Love: 0.2, Fortune: 0.25, Fame: 0.2, Adventure: 0.35 }; // I Ching
+
+  const weighted = (Object.keys(bias) as SingleSign[]).flatMap((k) =>
+    Array.from({ length: Math.round((bias[k] || 0.25) * 100) }, () => k)
+  );
+  const sign = pick(rand, weighted);
+
+  const icon =
+    divinator === "Horoscope" ? "★" : divinator === "Tarot" ? "♠︎" : "☯";
+
+  const headline = `${icon} ${divinator} suggests ${sign}`;
+  const flavor = pick(rand, FLAVORS[sign]);
+
+  return { divinator, headline, flavor, sign };
+}
+
+function combineToSingleSign(readings: Reading[], rand: () => number, focus: Profile["focus"]): SingleSign {
+  if (focus && focus !== "Auto") return focus;
+  const counts: Record<SingleSign, number> = { Love: 0, Fortune: 0, Fame: 0, Adventure: 0 };
+  readings.forEach((r) => (counts[r.sign]++));
+  const max = Math.max(...Object.values(counts));
+  const leaders = (Object.keys(counts) as SingleSign[]).filter((k) => counts[k] === max);
+  return pick(rand, leaders);
+}
+
+function dailySeed(profile: Profile): string {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const dateKey = `${yyyy}-${mm}-${dd}`;
+  const p = `${profile.name}|${profile.birthdate}|${profile.favoriteNumber}|${profile.intention}|${profile.focus}|${profile.theme}`;
+  return `v1:${dateKey}:${p}`;
+}
+
+const DEFAULT_PROFILE: Profile = {
+  name: "Traveler",
+  birthdate: "",
+  favoriteNumber: "",
+  focus: "Auto",
+  intention: "",
+  theme: "Mystic",
+};
+
+export default function DailyDivinationApp() {
+  const [profile, setProfile] = useState<Profile>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("dd.profile");
+        return raw ? { ...DEFAULT_PROFILE, ...JSON.parse(raw) } : DEFAULT_PROFILE;
+      } catch {
+        return DEFAULT_PROFILE;
+      }
+    }
+    return DEFAULT_PROFILE;
+  });
+  const [open, setOpen] = useState(false);
+
+  const rand = useMemo(() => seededRandom(dailySeed(profile)), [profile]);
+
+  const readings = useMemo(() => {
+    return [
+      generateReading(rand, "Horoscope"),
+      generateReading(rand, "Tarot"),
+      generateReading(rand, "I Ching"),
+    ];
+  }, [rand]);
+
+  const singleSign = useMemo(() => combineToSingleSign(readings, rand, profile.focus), [readings, rand, profile.focus]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("dd.profile", JSON.stringify(profile));
+      } catch {}
+    }
+  }, [profile]);
+
+  const themeGradient = themeToGradient[profile.theme];
+
+  return (
+    <div className={`min-h-screen w-full bg-gradient-to-b ${themeGradient} text-slate-100`}>      
+      {/* Header */}
+      <div className="max-w-5xl mx-auto px-4 pt-10 pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-6 h-6" />
+            <h1 className="text-2xl font-semibold tracking-tight">Daily Divination</h1>
+          </div>
+          <div className="flex items-center gap-2 text-sm opacity-80">
+            <CalendarDays className="w-4 h-4" />
+            <span>{new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</span>
+          </div>
+        </div>
+        <p className="mt-1 text-sm opacity-80">Every day you receive three readings — Horoscope, Tarot, and I Ching — which combine into your single sign.</p>
+      </div>
+
+      {/* Top: Single Sign */}
+      <div className="max-w-5xl mx-auto px-4">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          <Card className="bg-white/5 backdrop-blur border-white/10">
+            <CardHeader className="flex items-center sm:flex-row sm:justify-between gap-3">
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <Badge variant="secondary" className="text-base px-3 py-1 rounded-2xl bg-white/10 border border-white/20">
+                  {singleSign}
+                </Badge>
+                <span className="opacity-90">Your Single Sign for Today</span>
+              </CardTitle>
+              <div className="flex items-center gap-2 text-xs opacity-80">
+                <span className="hidden sm:block">Seed</span>
+                <code className="bg-black/30 px-2 py-1 rounded">{dailySeed(profile).slice(-10)}</code>
+              </div>
+            </CardHeader>
+            <CardContent className="pb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {SIGNS.map((s) => (
+                  <div key={s} className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${s === singleSign ? "border-white/60 bg-white/10" : "border-white/10 bg-white/5 opacity-80"}`}>
+                    {s === "Love" && <Heart className="w-4 h-4" />} 
+                    {s === "Fortune" && <TrendingUp className="w-4 h-4" />} 
+                    {s === "Fame" && <Star className="w-4 h-4" />} 
+                    {s === "Adventure" && <Map className="w-4 h-4" />} 
+                    <span className="text-sm">{s}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-sm opacity-90">
+                Based on today's three readings and your personalization settings.
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* Readings Grid */}
+      <div className="max-w-5xl mx-auto px-4 mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        {readings.map((r) => (
+          <motion.div key={r.divinator} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            <Card className="h-full bg-white/5 backdrop-blur border-white/10">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  {r.divinator === "Horoscope" && <Wand2 className="w-5 h-5" />} 
+                  {r.divinator === "Tarot" && <Sparkles className="w-5 h-5" />} 
+                  {r.divinator === "I Ching" && <Compass className="w-5 h-5" />} 
+                  {r.divinator}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="text-sm opacity-90">{r.headline}</div>
+                  <div className="text-sm opacity-80">{r.flavor}</div>
+                  <div className="mt-2">
+                    <Badge className="bg-white/10 border-white/20">{r.sign}</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Personalize Button (bottom-right) */}
+      <div className="fixed right-4 bottom-4">
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button className="rounded-2xl shadow-xl" variant="secondary">
+              <Settings2 className="w-4 h-4 mr-2" /> Personalize
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="bg-neutral-950 text-slate-100 border-white/10 w-[520px] max-w-full overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Personalize your readings</SheetTitle>
+            </SheetHeader>
+            <div className="mt-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" placeholder="Traveler" value={profile.name}
+                    onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} />
+                </div>
+                <div>
+                  <Label htmlFor="birthdate">Birthdate</Label>
+                  <Input id="birthdate" type="date" value={profile.birthdate}
+                    onChange={(e) => setProfile((p) => ({ ...p, birthdate: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="favoriteNumber">Favorite number</Label>
+                  <Input id="favoriteNumber" inputMode="numeric" placeholder="7"
+                    value={profile.favoriteNumber}
+                    onChange={(e) => setProfile((p) => ({ ...p, favoriteNumber: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Theme</Label>
+                  <Select value={profile.theme} onValueChange={(v: Profile["theme"]) => setProfile((p) => ({ ...p, theme: v }))}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Theme" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Serene">Serene</SelectItem>
+                      <SelectItem value="Mystic">Mystic</SelectItem>
+                      <SelectItem value="Bold">Bold</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label>Focus (override)</Label>
+                <Select value={profile.focus} onValueChange={(v: any) => setProfile((p) => ({ ...p, focus: v }))}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Auto" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Auto">Auto (let the three decide)</SelectItem>
+                    {SIGNS.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs opacity-70 mt-1">Choose a focus to always make your single sign match, or leave as Auto.</p>
+              </div>
+              <div>
+                <Label htmlFor="intention">Intention (today)</Label>
+                <Textarea id="intention" placeholder="e.g., Make steady progress on my craft." rows={3}
+                  value={profile.intention}
+                  onChange={(e) => setProfile((p) => ({ ...p, intention: e.target.value }))} />
+                <p className="text-xs opacity-70 mt-1">Your name, birthday, favorite number, and intention gently shape today's seed.</p>
+              </div>
+            </div>
+            <SheetFooter className="mt-6">
+              <div className="flex items-center gap-3 ml-auto">
+                <Button variant="ghost" onClick={() => setProfile(DEFAULT_PROFILE)}>Reset</Button>
+                <Button onClick={() => setOpen(false)}>Save & Refresh</Button>
+              </div>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {/* Footer */}
+      <div className="max-w-5xl mx-auto px-4 py-10 opacity-70 text-xs">
+        Built as a lightweight prototype. Readings refresh daily and after personalization. Data lives locally in your browser.
+      </div>
+    </div>
+  );
+}
