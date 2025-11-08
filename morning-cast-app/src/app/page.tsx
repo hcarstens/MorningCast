@@ -57,10 +57,14 @@ interface Reading {
 interface Profile {
   name: string;
   birthdate: string; // ISO yyyy-mm-dd
+  birthTime: string; // HH:mm (local) optional
   favoriteNumber: string;
   focus: SingleSign | "Auto";
   intention: string;
   theme: "Serene" | "Mystic" | "Bold";
+  readingDate: string; // ISO yyyy-mm-dd optional override
+  readingTime: string; // HH:mm optional override
+  location: string;
 }
 
 // --- Simple theming --- //
@@ -69,6 +73,152 @@ const themeToGradient: Record<Profile["theme"], string> = {
   Mystic: "from-violet-900 via-fuchsia-900 to-indigo-900",
   Bold: "from-zinc-900 via-neutral-900 to-zinc-900",
 };
+
+type DayPhaseKey = "dawn" | "morning" | "afternoon" | "evening" | "night";
+
+interface DayPhaseInfo {
+  key: DayPhaseKey;
+  futureWindow: string;
+}
+
+const BARNUM_TRAITS = [
+  { bright: "thoughtful", tension: "quietly ambitious" },
+  { bright: "warm", tension: "discerning" },
+  { bright: "perceptive", tension: "gently protective" },
+  { bright: "patient", tension: "softly daring" },
+  { bright: "creative", tension: "measured" },
+];
+
+const CONTEXT_OPTIONS: Record<DayPhaseKey, string[]> = {
+  dawn: [
+    "the pre-dawn hush",
+    "the way the world stretched before sunrise",
+    "the quiet pivot before the city wakes",
+  ],
+  morning: [
+    "the early morning flow",
+    "the first conversations of the day",
+    "the fresh rhythm after sunrise",
+  ],
+  afternoon: [
+    "the midday hum",
+    "the subtle shift after lunch",
+    "the pace of the afternoon",
+  ],
+  evening: [
+    "the twilight stretch",
+    "the gentle slowdown after work",
+    "the glow of the early evening",
+  ],
+  night: [
+    "the night breeze",
+    "the soft quiet past sunset",
+    "the reflective tone of late evening",
+  ],
+};
+
+const AGENT_PHRASES = [
+  "a trusted ally",
+  "a kind colleague",
+  "someone you didn’t expect",
+  "a nearby supporter",
+  "a quiet friend",
+];
+
+type TensionPattern = {
+  risk: string;
+  action: string;
+  reward: (agent: string, future: string) => string;
+};
+
+const TENSION_PATTERNS: TensionPattern[] = [
+  {
+    risk: "If you try to sprint through the next task",
+    action: "map one deliberate step",
+    reward: (agent, future) => `${agent} shares a timely hint before ${future}`,
+  },
+  {
+    risk: "If you second-guess the conversation",
+    action: "name the gentle question you really want answered",
+    reward: (agent, future) => `${agent} meets you with clarity before ${future}`,
+  },
+  {
+    risk: "If you dismiss the small win",
+    action: "celebrate it out loud",
+    reward: (agent, future) => `${agent} mirrors that joy before ${future}`,
+  },
+  {
+    risk: "If you shoulder every detail alone",
+    action: "invite a shared checklist",
+    reward: (agent, future) => `${agent} lightens the load before ${future}`,
+  },
+  {
+    risk: "If you hesitate to set the pace",
+    action: "choose a calm boundary",
+    reward: (agent, future) => `${agent} respects it before ${future}`,
+  },
+];
+
+function getDayPhase(date: Date): DayPhaseInfo {
+  const hour = date.getHours();
+  if (hour < 6) return { key: "dawn", futureWindow: "late morning" };
+  if (hour < 12) return { key: "morning", futureWindow: "early afternoon" };
+  if (hour < 17) return { key: "afternoon", futureWindow: "sunset" };
+  if (hour < 21) return { key: "evening", futureWindow: "tonight" };
+  return { key: "night", futureWindow: "tomorrow’s first light" };
+}
+
+function describeBirthReference(birthMoment?: Date): string | null {
+  if (!birthMoment) return null;
+  try {
+    const month = birthMoment.toLocaleString(undefined, { month: "long" });
+    return `${month} beginnings`;
+  } catch {
+    return null;
+  }
+}
+
+function combineDateTime(dateStr?: string, timeStr?: string, fallbackTime = "09:00"): Date | null {
+  const hasDate = Boolean(dateStr);
+  const hasTime = Boolean(timeStr);
+  if (!hasDate && !hasTime) return null;
+  const now = new Date();
+  const base = hasDate ? new Date(`${dateStr}T${timeStr || fallbackTime}`) : new Date(now);
+  if (Number.isNaN(base.getTime())) {
+    return null;
+  }
+  if (!hasDate) {
+    base.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+  const [fallbackHour, fallbackMinute] = fallbackTime.split(":").map((n) => parseInt(n, 10));
+  if (hasTime && timeStr) {
+    const [h, m] = timeStr.split(":").map((n) => parseInt(n, 10));
+    base.setHours(Number.isFinite(h) ? h : fallbackHour, Number.isFinite(m) ? m : fallbackMinute, 0, 0);
+  } else {
+    base.setHours(fallbackHour, fallbackMinute, 0, 0);
+  }
+  return base;
+}
+
+function resolveReadingMoment(profile: Profile): Date {
+  const customMoment = combineDateTime(profile.readingDate, profile.readingTime, "09:00");
+  return customMoment ?? new Date();
+}
+
+function resolveBirthMoment(profile: Profile): Date | null {
+  if (!profile.birthdate) return null;
+  return combineDateTime(profile.birthdate, profile.birthTime, "12:00");
+}
+
+function inferSignFromIntention(intention: string): SingleSign | null {
+  const text = intention.toLowerCase();
+  if (!text.trim()) return null;
+  if (/(love|heart|relationship|care|family)/.test(text)) return "Love";
+  if (/(money|budget|career|security|stability)/.test(text)) return "Fortune";
+  if (/(recognition|audience|share|voice|impact)/.test(text)) return "Fame";
+  if (/(journey|travel|explore|learn|adventure|expand)/.test(text)) return "Adventure";
+  return null;
+}
 
 // --- Sample flavor text pools --- //
 const FLAVORS: Record<SingleSign, string[]> = {
@@ -89,7 +239,7 @@ const FLAVORS: Record<SingleSign, string[]> = {
   ],
   Adventure: [
     "A detour hides the best view.",
-    "Say yes to the map's smudge.",
+    "Say yes to the map’s smudge.",
     "Curiosity hands you sturdy boots.",
   ],
 };
@@ -99,23 +249,84 @@ function pick<T>(rand: () => number, arr: T[]): T {
   return arr[Math.floor(rand() * arr.length)];
 }
 
-function generateReading(rand: () => number, divinator: Divinator): Reading {
-  // Base tilt by divinator
+function chooseSignForDivinator(
+  rand: () => number,
+  divinator: Divinator,
+  intention: string
+): SingleSign {
+  if (divinator === "Horoscope") {
+    const inferred = inferSignFromIntention(intention);
+    if (inferred) return inferred;
+  }
+
   const bias: Partial<Record<SingleSign, number>> =
     divinator === "Horoscope"
       ? { Love: 0.3, Fortune: 0.25, Fame: 0.2, Adventure: 0.25 }
       : divinator === "Tarot"
       ? { Love: 0.25, Fortune: 0.2, Fame: 0.35, Adventure: 0.2 }
-      : { Love: 0.2, Fortune: 0.25, Fame: 0.2, Adventure: 0.35 }; // I Ching
+      : { Love: 0.2, Fortune: 0.25, Fame: 0.2, Adventure: 0.35 };
 
   const weighted = (Object.keys(bias) as SingleSign[]).flatMap((k) =>
     Array.from({ length: Math.round((bias[k] || 0.25) * 100) }, () => k)
   );
-  const sign = pick(rand, weighted);
+  return pick(rand, weighted);
+}
 
-  const icon =
-    divinator === "Horoscope" ? "★" : divinator === "Tarot" ? "♠︎" : "☯";
+function generateHoroscopeReading(
+  rand: () => number,
+  profile: Profile,
+  readingMoment: Date,
+  birthMoment: Date | null
+): Reading {
+  const dayPhase = getDayPhase(readingMoment);
+  const trait = pick(rand, BARNUM_TRAITS);
+  const context = pick(rand, CONTEXT_OPTIONS[dayPhase.key]);
+  const agent = pick(rand, AGENT_PHRASES);
+  const tension = pick(rand, TENSION_PATTERNS);
+  const birthRef = describeBirthReference(birthMoment ?? undefined);
+  const location = profile.location.trim();
+  const locationClause = location ? ` while you move through ${location}` : "";
 
+  const validation = `Your ${trait.bright} yet ${trait.tension} nature${
+    birthRef ? `, rooted in your ${birthRef},` : ""
+  } has been reading ${context}${locationClause}, and it’s right to trust that sense.`;
+
+  const actionLine = `${tension.risk}; choose to ${tension.action}, and ${tension.reward(
+    agent,
+    dayPhase.futureWindow
+  )}.`;
+
+  const intentionText = profile.intention.trim();
+  const trimmedIntention =
+    intentionText.length > 80 ? `${intentionText.slice(0, 77).trimEnd()}…` : intentionText;
+  const detail = trimmedIntention
+    ? `Carry “${trimmedIntention}” as you step into the Tarot and I Ching phases.`
+    : "Let this validation set the tone for your Tarot and I Ching guidance.";
+
+  const sign = chooseSignForDivinator(rand, "Horoscope", profile.intention);
+
+  return {
+    divinator: "Horoscope",
+    headline: `★ Horoscope frames ${sign}`,
+    flavor: `${validation} ${actionLine}`,
+    sign,
+    detail,
+  };
+}
+
+function generateReading(
+  rand: () => number,
+  divinator: Divinator,
+  profile: Profile,
+  readingMoment: Date,
+  birthMoment: Date | null
+): Reading {
+  if (divinator === "Horoscope") {
+    return generateHoroscopeReading(rand, profile, readingMoment, birthMoment);
+  }
+
+  const sign = chooseSignForDivinator(rand, divinator, profile.intention);
+  const icon = divinator === "Tarot" ? "♠︎" : "☯";
   const headline = `${icon} ${divinator} suggests ${sign}`;
   const flavor = pick(rand, FLAVORS[sign]);
 
@@ -131,23 +342,28 @@ function combineToSingleSign(readings: Reading[], rand: () => number, focus: Pro
   return pick(rand, leaders);
 }
 
-function dailySeed(profile: Profile): string {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  const dateKey = `${yyyy}-${mm}-${dd}`;
-  const p = `${profile.name}|${profile.birthdate}|${profile.favoriteNumber}|${profile.intention}|${profile.focus}|${profile.theme}`;
-  return `v1:${dateKey}:${p}`;
+function dailySeed(profile: Profile, readingMoment: Date): string {
+  const yyyy = readingMoment.getFullYear();
+  const mm = String(readingMoment.getMonth() + 1).padStart(2, "0");
+  const dd = String(readingMoment.getDate()).padStart(2, "0");
+  const hh = String(readingMoment.getHours()).padStart(2, "0");
+  const min = String(readingMoment.getMinutes()).padStart(2, "0");
+  const dateKey = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  const p = `${profile.name}|${profile.birthdate}|${profile.birthTime}|${profile.favoriteNumber}|${profile.intention}|${profile.focus}|${profile.theme}|${profile.location}|${profile.readingDate}|${profile.readingTime}`;
+  return `v2:${dateKey}:${p}`;
 }
 
 const DEFAULT_PROFILE: Profile = {
   name: "Traveler",
   birthdate: "",
+  birthTime: "",
   favoriteNumber: "",
   focus: "Auto",
   intention: "",
   theme: "Mystic",
+  readingDate: "",
+  readingTime: "",
+  location: "",
 };
 
 export default function DailyDivinationApp() {
@@ -164,15 +380,18 @@ export default function DailyDivinationApp() {
   });
   const [open, setOpen] = useState(false);
 
-  const rand = useMemo(() => seededRandom(dailySeed(profile)), [profile]);
+  const readingMoment = useMemo(() => resolveReadingMoment(profile), [profile]);
+  const birthMoment = useMemo(() => resolveBirthMoment(profile), [profile]);
+  const seedKey = useMemo(() => dailySeed(profile, readingMoment), [profile, readingMoment]);
+  const rand = useMemo(() => seededRandom(seedKey), [seedKey]);
 
   const readings = useMemo(() => {
     return [
-      generateReading(rand, "Horoscope"),
-      generateReading(rand, "Tarot"),
-      generateReading(rand, "I Ching"),
+      generateReading(rand, "Horoscope", profile, readingMoment, birthMoment),
+      generateReading(rand, "Tarot", profile, readingMoment, birthMoment),
+      generateReading(rand, "I Ching", profile, readingMoment, birthMoment),
     ];
-  }, [rand]);
+  }, [rand, profile, readingMoment, birthMoment]);
 
   const singleSign = useMemo(() => combineToSingleSign(readings, rand, profile.focus), [readings, rand, profile.focus]);
 
@@ -183,6 +402,25 @@ export default function DailyDivinationApp() {
       } catch {}
     }
   }, [profile]);
+
+  const dateLabel = useMemo(
+    () =>
+      readingMoment.toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      }),
+    [readingMoment]
+  );
+  const timeLabel = useMemo(
+    () =>
+      readingMoment.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    [readingMoment]
+  );
+  const locationLabel = profile.location.trim();
 
   const themeGradient = themeToGradient[profile.theme];
 
@@ -195,9 +433,17 @@ export default function DailyDivinationApp() {
             <Sparkles className="w-6 h-6" />
             <h1 className="text-2xl font-semibold tracking-tight">Daily Divination</h1>
           </div>
-          <div className="flex items-center gap-2 text-sm opacity-80">
+          <div className="flex items-center gap-2 text-sm opacity-80 flex-wrap justify-end">
             <CalendarDays className="w-4 h-4" />
-            <span>{new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</span>
+            <span>{dateLabel}</span>
+            <span className="opacity-60">•</span>
+            <span>{timeLabel}</span>
+            {locationLabel && (
+              <>
+                <span className="opacity-60">•</span>
+                <span>{locationLabel}</span>
+              </>
+            )}
           </div>
         </div>
         <p className="mt-1 text-sm opacity-80">Every day you receive three readings — Horoscope, Tarot, and I Ching — which combine into your single sign.</p>
@@ -216,7 +462,7 @@ export default function DailyDivinationApp() {
               </CardTitle>
               <div className="flex items-center gap-2 text-xs opacity-80">
                 <span className="hidden sm:block">Seed</span>
-                <code className="bg-black/30 px-2 py-1 rounded">{dailySeed(profile).slice(-10)}</code>
+                <code className="bg-black/30 px-2 py-1 rounded">{seedKey.slice(-10)}</code>
               </div>
             </CardHeader>
             <CardContent className="pb-6">
@@ -232,7 +478,7 @@ export default function DailyDivinationApp() {
                 ))}
               </div>
               <p className="mt-4 text-sm opacity-90">
-                Based on today's three readings and your personalization settings.
+                Based on today’s three readings and your personalization settings.
               </p>
             </CardContent>
           </Card>
@@ -256,6 +502,7 @@ export default function DailyDivinationApp() {
                 <div className="space-y-2">
                   <div className="text-sm opacity-90">{r.headline}</div>
                   <div className="text-sm opacity-80">{r.flavor}</div>
+                  {r.detail && <div className="text-xs opacity-70 leading-relaxed">{r.detail}</div>}
                   <div className="mt-2">
                     <Badge className="bg-white/10 border-white/20">{r.sign}</Badge>
                   </div>
@@ -293,6 +540,19 @@ export default function DailyDivinationApp() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <Label htmlFor="birthTime">Birth time (optional)</Label>
+                  <Input id="birthTime" type="time" value={profile.birthTime}
+                    onChange={(e) => setProfile((p) => ({ ...p, birthTime: e.target.value }))} />
+                  <p className="text-xs opacity-70 mt-1">Add it if you know the local time; blank keeps things gently vague.</p>
+                </div>
+                <div>
+                  <Label htmlFor="location">Location (optional)</Label>
+                  <Input id="location" placeholder="City, region" value={profile.location}
+                    onChange={(e) => setProfile((p) => ({ ...p, location: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <Label htmlFor="favoriteNumber">Favorite number</Label>
                   <Input id="favoriteNumber" inputMode="numeric" placeholder="7"
                     value={profile.favoriteNumber}
@@ -310,9 +570,23 @@ export default function DailyDivinationApp() {
                   </Select>
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="readingDate">Reading date (optional)</Label>
+                  <Input id="readingDate" type="date" value={profile.readingDate}
+                    onChange={(e) => setProfile((p) => ({ ...p, readingDate: e.target.value }))} />
+                  <p className="text-xs opacity-70 mt-1">Leave blank to anchor to today’s date automatically.</p>
+                </div>
+                <div>
+                  <Label htmlFor="readingTime">Reading time (optional)</Label>
+                  <Input id="readingTime" type="time" value={profile.readingTime}
+                    onChange={(e) => setProfile((p) => ({ ...p, readingTime: e.target.value }))} />
+                  <p className="text-xs opacity-70 mt-1">Leave blank to capture the moment you open the app.</p>
+                </div>
+              </div>
               <div>
                 <Label>Focus (override)</Label>
-                <Select value={profile.focus} onValueChange={(v: any) => setProfile((p) => ({ ...p, focus: v }))}>
+                <Select value={profile.focus} onValueChange={(v: Profile["focus"]) => setProfile((p) => ({ ...p, focus: v }))}>
                   <SelectTrigger className="w-full"><SelectValue placeholder="Auto" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Auto">Auto (let the three decide)</SelectItem>
@@ -328,7 +602,7 @@ export default function DailyDivinationApp() {
                 <Textarea id="intention" placeholder="e.g., Make steady progress on my craft." rows={3}
                   value={profile.intention}
                   onChange={(e) => setProfile((p) => ({ ...p, intention: e.target.value }))} />
-                <p className="text-xs opacity-70 mt-1">Your name, birthday, favorite number, and intention gently shape today's seed.</p>
+                <p className="text-xs opacity-70 mt-1">Your name, birth details, favorite number, intention, location, and reading moment gently shape today’s seed.</p>
               </div>
             </div>
             <SheetFooter className="mt-6">
