@@ -54,6 +54,25 @@ interface Reading {
   detail?: string;
 }
 
+interface HoroscopePhaseContext {
+  validation: string;
+  internalTension: string;
+  chosenAction: string;
+  rewardLine: string;
+  agent: string;
+  futureWindow: string;
+  sign: SingleSign;
+}
+
+interface TarotPhaseContext {
+  focusCard: TarotSpreadCard;
+  focusTone: string;
+  futureCard: TarotSpreadCard;
+  futureTone: string;
+  bridgeAction: string;
+  horoscopeTension: string;
+}
+
 interface Profile {
   name: string;
   birthdate: string; // ISO yyyy-mm-dd
@@ -349,13 +368,6 @@ function inferSignFromIntention(intention: string): SingleSign | null {
   return null;
 }
 
-const SIGN_ADVICE: Record<SingleSign, string> = {
-  Love: "offering one clear kindness",
-  Fortune: "tracking the next promising step",
-  Fame: "sharing your craft with steady pride",
-  Adventure: "choosing the curious route today",
-};
-
 type LineShift = "yin-to-yang" | "yang-to-yin";
 
 type HexagramTransition = {
@@ -606,7 +618,7 @@ function generateHoroscopeReading(
   profile: Profile,
   readingMoment: Date,
   birthMoment: Date | null
-): Reading {
+): { reading: Reading; context: HoroscopePhaseContext } {
   const dayPhase = getDayPhase(readingMoment);
   const trait = pick(rand, BARNUM_TRAITS);
   const context = pick(rand, CONTEXT_OPTIONS[dayPhase.key]);
@@ -615,7 +627,6 @@ function generateHoroscopeReading(
   const birthRef = describeBirthReference(birthMoment ?? undefined);
   const location = profile.location.trim();
   const locationClause = location ? ` while you move through ${location}` : "";
-
   const validation = `Your ${trait.bright} yet ${trait.tension} nature${
     birthRef ? `, rooted in your ${birthRef},` : ""
   } has been reading ${context}${locationClause}, and it’s right to trust that sense.`;
@@ -628,38 +639,73 @@ function generateHoroscopeReading(
   const intentionText = profile.intention.trim();
   const trimmedIntention =
     intentionText.length > 80 ? `${intentionText.slice(0, 77).trimEnd()}…` : intentionText;
-  const detail = trimmedIntention
-    ? `Carry “${trimmedIntention}” as you step into the Tarot and I Ching phases.`
-    : "Let this validation set the tone for your Tarot and I Ching guidance.";
+  const detail = `Phase 1 · Contextual Diagnosis — ${
+    trimmedIntention
+      ? `Hold “${trimmedIntention}” while you notice how this validation lands.`
+      : "Let this validation steady you before moving into interpretation."
+  }`;
 
   const sign = chooseSignForDivinator(rand, "Horoscope", profile.intention);
 
-  return {
+  const reading: Reading = {
     divinator: "Horoscope",
     headline: `★ Horoscope frames ${sign}`,
     flavor: `${validation} ${actionLine}`,
     sign,
     detail,
   };
+
+  const contextPayload: HoroscopePhaseContext = {
+    validation,
+    internalTension: tension.risk.replace(/^If you /i, "If you "),
+    chosenAction: tension.action,
+    rewardLine: tension.reward(agent, dayPhase.futureWindow),
+    agent,
+    futureWindow: dayPhase.futureWindow,
+    sign,
+  };
+
+  return { reading, context: contextPayload };
 }
 
 function generateTarotReading(
   rand: () => number,
   profile: Profile,
-  horoscope: Reading
-): Reading {
+  horoscope: Reading,
+  horoscopeContext: HoroscopePhaseContext
+): { reading: Reading; context: TarotPhaseContext } {
   const spread = drawTarotSpread(rand);
   const sign = chooseSignForDivinator(rand, "Tarot", profile.intention);
   const flavor = spread.map((card) => formatTarotLine(card)).join(" ");
-  const detail = `Echo your horoscope ${horoscope.sign.toLowerCase()} focus by ${SIGN_ADVICE[horoscope.sign]}.`;
+  const focusCard = spread[1];
+  const futureCard = spread[2];
+  const focusTone = focusCard.orientation === "upright" ? focusCard.card.upright : focusCard.card.soft;
+  const futureTone = futureCard.orientation === "upright" ? futureCard.card.upright : futureCard.card.soft;
+  const bridgeAction = `translate ${horoscopeContext.chosenAction} into ${focusTone}`;
+  const detail = `Phase 2 · Active Assessment — Your horoscope named the tension: “${
+    horoscopeContext.internalTension
+  }.” Let ${focusCard.card.name} guide you to ${bridgeAction}, then watch how ${
+    futureCard.card.name
+  } ${futureTone} as ${horoscopeContext.rewardLine.toLowerCase()}.`;
 
-  return {
+  const reading: Reading = {
     divinator: "Tarot",
     headline: `♠︎ Tarot maps ${sign}`,
     flavor,
     sign,
     detail,
   };
+
+  const contextPayload: TarotPhaseContext = {
+    focusCard,
+    focusTone,
+    futureCard,
+    futureTone,
+    bridgeAction,
+    horoscopeTension: horoscopeContext.internalTension,
+  };
+
+  return { reading, context: contextPayload };
 }
 
 function prioritizeTransitions(
@@ -677,7 +723,9 @@ function generateIChingReading(
   rand: () => number,
   profile: Profile,
   horoscope: Reading,
-  tarot: Reading
+  tarot: Reading,
+  horoscopeContext: HoroscopePhaseContext,
+  tarotContext: TarotPhaseContext
 ): Reading {
   const sign = chooseSignForDivinator(rand, "I Ching", profile.intention);
   const relevantHexagrams = HEXAGRAM_LIST.filter((hex) => hex.focus.includes(sign));
@@ -692,9 +740,11 @@ function generateIChingReading(
   const flavor = `“${primary.number} ${primary.name}” (${primary.image}) affirms ${primary.attribute}. Line ${
     transition.line
   } shifts ${movement}—${movementTone}—forming “${future.number} ${future.name}”. ${transition.counsel}`;
-  const detail = `Let the horoscope’s ${horoscope.sign.toLowerCase()} framing and the Tarot’s ${tarot.sign.toLowerCase()} map steady this ${sign.toLowerCase()} focus. Honor the natural pace by ${
+  const detail = `Phase 3 · Ethical Transition — The Tarot asked you to ${tarotContext.bridgeAction}. Align that motion with the I Ching by ${
     future.action
-  }, allowing the shift to ripen before the next move.`;
+  } so the shift from ${primary.name.toLowerCase()} to ${future.name.toLowerCase()} respects natural law. Keep ${
+    horoscopeContext.rewardLine.toLowerCase()
+  } in view and let ${tarotContext.futureCard.card.name}’s lesson unfold at the rhythm of ${horoscopeContext.futureWindow}.`;
 
   return { divinator: "I Ching", headline, flavor, sign, detail };
 }
@@ -752,9 +802,26 @@ export default function DailyDivinationApp() {
   const rand = useMemo(() => seededRandom(seedKey), [seedKey]);
 
   const readings = useMemo(() => {
-    const horoscope = generateHoroscopeReading(rand, profile, readingMoment, birthMoment);
-    const tarot = generateTarotReading(rand, profile, horoscope);
-    const iching = generateIChingReading(rand, profile, horoscope, tarot);
+    const { reading: horoscope, context: horoscopeContext } = generateHoroscopeReading(
+      rand,
+      profile,
+      readingMoment,
+      birthMoment
+    );
+    const { reading: tarot, context: tarotContext } = generateTarotReading(
+      rand,
+      profile,
+      horoscope,
+      horoscopeContext
+    );
+    const iching = generateIChingReading(
+      rand,
+      profile,
+      horoscope,
+      tarot,
+      horoscopeContext,
+      tarotContext
+    );
     return [horoscope, tarot, iching];
   }, [rand, profile, readingMoment, birthMoment]);
 
