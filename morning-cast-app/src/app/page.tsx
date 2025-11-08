@@ -617,7 +617,8 @@ function generateHoroscopeReading(
   rand: () => number,
   profile: Profile,
   readingMoment: Date,
-  birthMoment: Date | null
+  birthMoment: Date | null,
+  personalization?: ActivePersonalization | null
 ): { reading: Reading; context: HoroscopePhaseContext } {
   const dayPhase = getDayPhase(readingMoment);
   const trait = pick(rand, BARNUM_TRAITS);
@@ -625,7 +626,8 @@ function generateHoroscopeReading(
   const agent = pick(rand, AGENT_PHRASES);
   const tension = pick(rand, TENSION_PATTERNS);
   const birthRef = describeBirthReference(birthMoment ?? undefined);
-  const location = profile.location.trim();
+  const personaProfile = personalization?.profile ?? profile;
+  const location = personaProfile.location.trim();
   const locationClause = location ? ` while you move through ${location}` : "";
   const validation = `Your ${trait.bright} yet ${trait.tension} nature${
     birthRef ? `, rooted in your ${birthRef},` : ""
@@ -636,16 +638,21 @@ function generateHoroscopeReading(
     dayPhase.futureWindow
   )}.`;
 
-  const intentionText = profile.intention.trim();
+  const intentionSource = personalization?.profile.intention ?? profile.intention;
+  const intentionText = intentionSource.trim();
   const trimmedIntention =
     intentionText.length > 80 ? `${intentionText.slice(0, 77).trimEnd()}…` : intentionText;
   const detail = `Phase 1 · Contextual Diagnosis — ${
     trimmedIntention
       ? `Hold “${trimmedIntention}” while you notice how this validation lands.`
       : "Let this validation steady you before moving into interpretation."
+  }${
+    personalization
+      ? ` Personalization · “${personalization.label}” keeps this horoscope attuned to your saved pattern.`
+      : ""
   }`;
 
-  const sign = chooseSignForDivinator(rand, "Horoscope", profile.intention);
+  const sign = chooseSignForDivinator(rand, "Horoscope", intentionSource);
 
   const reading: Reading = {
     divinator: "Horoscope",
@@ -672,10 +679,12 @@ function generateTarotReading(
   rand: () => number,
   profile: Profile,
   horoscope: Reading,
-  horoscopeContext: HoroscopePhaseContext
+  horoscopeContext: HoroscopePhaseContext,
+  personalization?: ActivePersonalization | null
 ): { reading: Reading; context: TarotPhaseContext } {
   const spread = drawTarotSpread(rand);
-  const sign = chooseSignForDivinator(rand, "Tarot", profile.intention);
+  const intentionSource = personalization?.profile.intention ?? profile.intention;
+  const sign = chooseSignForDivinator(rand, "Tarot", intentionSource);
   const flavor = spread.map((card) => formatTarotLine(card)).join(" ");
   const focusCard = spread[1];
   const futureCard = spread[2];
@@ -686,7 +695,11 @@ function generateTarotReading(
     horoscopeContext.internalTension
   }.” Let ${focusCard.card.name} guide you to ${bridgeAction}, then watch how ${
     futureCard.card.name
-  } ${futureTone} as ${horoscopeContext.rewardLine.toLowerCase()}.`;
+  } ${futureTone} as ${horoscopeContext.rewardLine.toLowerCase()}.${
+    personalization
+      ? ` Personalization · “${personalization.label}” keeps the spread aligned with the tone you saved.`
+      : ""
+  }`;
 
   const reading: Reading = {
     divinator: "Tarot",
@@ -725,9 +738,11 @@ function generateIChingReading(
   horoscope: Reading,
   tarot: Reading,
   horoscopeContext: HoroscopePhaseContext,
-  tarotContext: TarotPhaseContext
+  tarotContext: TarotPhaseContext,
+  personalization?: ActivePersonalization | null
 ): Reading {
-  const sign = chooseSignForDivinator(rand, "I Ching", profile.intention);
+  const intentionSource = personalization?.profile.intention ?? profile.intention;
+  const sign = chooseSignForDivinator(rand, "I Ching", intentionSource);
   const relevantHexagrams = HEXAGRAM_LIST.filter((hex) => hex.focus.includes(sign));
   const primary = relevantHexagrams.length ? pick(rand, relevantHexagrams) : pick(rand, HEXAGRAM_LIST);
   const transitionPool = prioritizeTransitions(primary.transitions, horoscope.sign, tarot.sign);
@@ -744,7 +759,11 @@ function generateIChingReading(
     future.action
   } so the shift from ${primary.name.toLowerCase()} to ${future.name.toLowerCase()} respects natural law. Keep ${
     horoscopeContext.rewardLine.toLowerCase()
-  } in view and let ${tarotContext.futureCard.card.name}’s lesson unfold at the rhythm of ${horoscopeContext.futureWindow}.`;
+  } in view and let ${tarotContext.futureCard.card.name}’s lesson unfold at the rhythm of ${horoscopeContext.futureWindow}.${
+    personalization
+      ? ` Personalization · “${personalization.label}” steadies how you translate this hexagram into action.`
+      : ""
+  }`;
 
   return { divinator: "I Ching", headline, flavor, sign, detail };
 }
@@ -782,19 +801,167 @@ const DEFAULT_PROFILE: Profile = {
   location: "",
 };
 
+const PROFILE_STORAGE_KEY = "dd.profile";
+const SAVED_STORAGE_KEY = "dd.savedProfiles";
+const ACTIVE_STORAGE_KEY = "dd.activePersonalization";
+
+type SavedPersonalization = {
+  id: string;
+  label: string;
+  profile: Profile;
+  updatedAt: string;
+};
+
+type ActivePersonalization = {
+  id: string;
+  label: string;
+  profile: Profile;
+};
+
+function applyProfileDefaults(data?: Partial<Profile> | null): Profile {
+  return { ...DEFAULT_PROFILE, ...(data || {}) };
+}
+
+function createPersonalizationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `personalization-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
+}
+
+function areProfilesEqual(a: Profile, b: Profile): boolean {
+  return (
+    a.name === b.name &&
+    a.birthdate === b.birthdate &&
+    a.birthTime === b.birthTime &&
+    a.favoriteNumber === b.favoriteNumber &&
+    a.focus === b.focus &&
+    a.intention === b.intention &&
+    a.theme === b.theme &&
+    a.readingDate === b.readingDate &&
+    a.readingTime === b.readingTime &&
+    a.location === b.location
+  );
+}
+
+function loadSavedPersonalizationsFromStorage(): SavedPersonalization[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SAVED_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as unknown[])
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const record = entry as Record<string, unknown>;
+        const id = typeof record.id === "string" ? record.id : null;
+        const label = typeof record.label === "string" ? record.label.trim() : "";
+        const profileData =
+          record.profile && typeof record.profile === "object"
+            ? (record.profile as Partial<Profile>)
+            : {};
+        const updatedAt =
+          typeof record.updatedAt === "string" ? record.updatedAt : new Date().toISOString();
+        if (!id) return null;
+        return {
+          id,
+          label: label || "Untitled",
+          profile: applyProfileDefaults(profileData),
+          updatedAt,
+        } as SavedPersonalization;
+      })
+      .filter(Boolean) as SavedPersonalization[];
+  } catch {
+    return [];
+  }
+}
+
+function loadActivePersonalizationIdFromStorage(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem(ACTIVE_STORAGE_KEY);
+    return stored ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function DailyDivinationApp() {
+  const [savedPersonalizations, setSavedPersonalizations] = useState<SavedPersonalization[]>(() =>
+    loadSavedPersonalizationsFromStorage()
+  );
+  const [activePersonalizationId, setActivePersonalizationId] = useState<string | null>(() =>
+    loadActivePersonalizationIdFromStorage()
+  );
   const [profile, setProfile] = useState<Profile>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const raw = localStorage.getItem("dd.profile");
-        return raw ? { ...DEFAULT_PROFILE, ...JSON.parse(raw) } : DEFAULT_PROFILE;
-      } catch {
-        return DEFAULT_PROFILE;
+    if (typeof window === "undefined") return DEFAULT_PROFILE;
+    const storedSaved = loadSavedPersonalizationsFromStorage();
+    const storedActiveId = loadActivePersonalizationIdFromStorage();
+    if (storedActiveId) {
+      const match = storedSaved.find((entry) => entry.id === storedActiveId);
+      if (match) {
+        return applyProfileDefaults(match.profile);
       }
     }
-    return DEFAULT_PROFILE;
+    try {
+      const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+      return raw ? applyProfileDefaults(JSON.parse(raw)) : DEFAULT_PROFILE;
+    } catch {
+      return DEFAULT_PROFILE;
+    }
   });
+  const [draftProfile, setDraftProfile] = useState<Profile>({ ...profile });
+  const [draftPersonalizationId, setDraftPersonalizationId] = useState<string | null>(activePersonalizationId);
+  const [personalizationLabel, setPersonalizationLabel] = useState<string>("");
   const [open, setOpen] = useState(false);
+
+  const activePersonalization = useMemo(() => {
+    if (!activePersonalizationId) return null;
+    return savedPersonalizations.find((entry) => entry.id === activePersonalizationId) ?? null;
+  }, [activePersonalizationId, savedPersonalizations]);
+
+  const personalizationForGenerators = useMemo(() => {
+    if (activePersonalization) return activePersonalization;
+    if (!areProfilesEqual(profile, DEFAULT_PROFILE)) {
+      const fallbackLabel = profile.name.trim() || "Custom profile";
+      return { id: "custom", label: fallbackLabel, profile };
+    }
+    return null;
+  }, [activePersonalization, profile]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+      } catch {}
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const payload = savedPersonalizations.map((entry) => ({
+          id: entry.id,
+          label: entry.label,
+          profile: entry.profile,
+          updatedAt: entry.updatedAt,
+        }));
+        window.localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(payload));
+      } catch {}
+    }
+  }, [savedPersonalizations]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (activePersonalizationId && activePersonalization) {
+        window.localStorage.setItem(ACTIVE_STORAGE_KEY, activePersonalizationId);
+      } else {
+        window.localStorage.removeItem(ACTIVE_STORAGE_KEY);
+      }
+    } catch {}
+  }, [activePersonalizationId, activePersonalization]);
 
   const readingMoment = useMemo(() => resolveReadingMoment(profile), [profile]);
   const birthMoment = useMemo(() => resolveBirthMoment(profile), [profile]);
@@ -806,13 +973,15 @@ export default function DailyDivinationApp() {
       rand,
       profile,
       readingMoment,
-      birthMoment
+      birthMoment,
+      personalizationForGenerators
     );
     const { reading: tarot, context: tarotContext } = generateTarotReading(
       rand,
       profile,
       horoscope,
-      horoscopeContext
+      horoscopeContext,
+      personalizationForGenerators
     );
     const iching = generateIChingReading(
       rand,
@@ -820,20 +989,118 @@ export default function DailyDivinationApp() {
       horoscope,
       tarot,
       horoscopeContext,
-      tarotContext
+      tarotContext,
+      personalizationForGenerators
     );
     return [horoscope, tarot, iching];
-  }, [rand, profile, readingMoment, birthMoment]);
+  }, [rand, profile, readingMoment, birthMoment, personalizationForGenerators]);
 
   const singleSign = useMemo(() => combineToSingleSign(readings, rand, profile.focus), [readings, rand, profile.focus]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("dd.profile", JSON.stringify(profile));
-      } catch {}
+  const handleSavePersonalization = () => {
+    const label = personalizationLabel.trim();
+    if (!label) return;
+    const snapshot: Profile = { ...draftProfile };
+    const timestamp = new Date().toISOString();
+    let resolvedId = draftPersonalizationId ?? "";
+    setSavedPersonalizations((prev) => {
+      const existingIndex = draftPersonalizationId
+        ? prev.findIndex((item) => item.id === draftPersonalizationId)
+        : -1;
+      if (existingIndex >= 0) {
+        resolvedId = draftPersonalizationId!;
+        const next = [...prev];
+        next[existingIndex] = {
+          id: resolvedId,
+          label,
+          profile: { ...snapshot },
+          updatedAt: timestamp,
+        };
+        return next;
+      }
+      const duplicate = prev.find((item) => item.label.toLowerCase() === label.toLowerCase());
+      if (duplicate) {
+        resolvedId = duplicate.id;
+        return prev.map((item) =>
+          item.id === duplicate.id
+            ? { id: duplicate.id, label, profile: { ...snapshot }, updatedAt: timestamp }
+            : item
+        );
+      }
+      resolvedId = createPersonalizationId();
+      return [
+        ...prev,
+        {
+          id: resolvedId,
+          label,
+          profile: { ...snapshot },
+          updatedAt: timestamp,
+        },
+      ];
+    });
+    setDraftPersonalizationId(resolvedId || null);
+    setPersonalizationLabel(label);
+  };
+
+  const handleClearDraftPersonalization = () => {
+    setDraftPersonalizationId(null);
+    setPersonalizationLabel("");
+  };
+
+  const handleLoadPersonalization = (entry: SavedPersonalization) => {
+    setDraftProfile({ ...entry.profile });
+    setDraftPersonalizationId(entry.id);
+    setPersonalizationLabel(entry.label);
+  };
+
+  const handleUsePersonalization = (entry: SavedPersonalization) => {
+    const snapshot: Profile = { ...entry.profile };
+    setProfile(snapshot);
+    setDraftProfile(snapshot);
+    setActivePersonalizationId(entry.id);
+    setDraftPersonalizationId(entry.id);
+    setPersonalizationLabel(entry.label);
+    setOpen(false);
+  };
+
+  const handleDeletePersonalization = (id: string) => {
+    setSavedPersonalizations((prev) => prev.filter((entry) => entry.id !== id));
+    if (draftPersonalizationId === id) {
+      setDraftPersonalizationId(null);
+      setPersonalizationLabel("");
     }
-  }, [profile]);
+    if (activePersonalizationId === id) {
+      setActivePersonalizationId(null);
+    }
+  };
+
+  const handleApplyDraftProfile = () => {
+    const snapshot: Profile = { ...draftProfile };
+    const matchingSaved =
+      draftPersonalizationId && savedPersonalizations.find((item) => item.id === draftPersonalizationId);
+    const matchesSaved = matchingSaved ? areProfilesEqual(matchingSaved.profile, snapshot) : false;
+    setProfile(snapshot);
+    setActivePersonalizationId(matchesSaved ? matchingSaved!.id : null);
+    setOpen(false);
+  };
+
+  const handleResetProfile = () => {
+    const resetSnapshot: Profile = { ...DEFAULT_PROFILE };
+    setDraftProfile(resetSnapshot);
+    setDraftPersonalizationId(null);
+    setPersonalizationLabel("");
+    setProfile(resetSnapshot);
+    setActivePersonalizationId(null);
+  };
+
+  const handleSheetOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) {
+      setDraftProfile({ ...profile });
+      setDraftPersonalizationId(activePersonalization?.id ?? null);
+      setPersonalizationLabel(activePersonalization?.label ?? "");
+    }
+  };
 
   const dateLabel = useMemo(
     () =>
@@ -947,7 +1214,7 @@ export default function DailyDivinationApp() {
 
       {/* Personalize Button (bottom-right) */}
       <div className="fixed right-4 bottom-4">
-        <Sheet open={open} onOpenChange={setOpen}>
+        <Sheet open={open} onOpenChange={handleSheetOpenChange}>
           <SheetTrigger asChild>
             <Button className="rounded-2xl shadow-xl" variant="secondary">
               <Settings2 className="w-4 h-4 mr-2" /> Personalize
@@ -958,42 +1225,146 @@ export default function DailyDivinationApp() {
               <SheetTitle>Personalize your readings</SheetTitle>
             </SheetHeader>
             <div className="mt-4 space-y-4">
+              <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Saved personalizations</span>
+                  {activePersonalization && (
+                    <Badge className="bg-white/10 border-white/20 text-[11px] uppercase tracking-wide">
+                      Active · {activePersonalization.label}
+                    </Badge>
+                  )}
+                </div>
+                {savedPersonalizations.length === 0 ? (
+                  <p className="text-xs opacity-70">
+                    Save settings to reuse them later. Everything stays on this device.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {savedPersonalizations.map((item) => {
+                      const isActive = activePersonalization?.id === item.id;
+                      const updatedAt = new Date(item.updatedAt);
+                      const updatedText = Number.isNaN(updatedAt.getTime())
+                        ? "Recently saved"
+                        : `Updated ${updatedAt.toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })}`;
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${
+                            isActive ? "border-white/50 bg-white/10" : "border-white/10 bg-white/5"
+                          }`}
+                        >
+                          <div>
+                            <div className="text-sm font-medium">{item.label}</div>
+                            <div className="text-[11px] uppercase tracking-wide opacity-60">{updatedText}</div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => handleUsePersonalization(item)}>
+                              Use
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleLoadPersonalization(item)}>
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-rose-200 hover:text-rose-100"
+                              onClick={() => handleDeletePersonalization(item.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-3">
+                <Label htmlFor="personalizationLabel">Save these settings</Label>
+                <Input
+                  id="personalizationLabel"
+                  placeholder="e.g., Sunrise focus"
+                  value={personalizationLabel}
+                  onChange={(e) => setPersonalizationLabel(e.target.value)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" onClick={handleSavePersonalization} disabled={!personalizationLabel.trim()}>
+                    Save personalization
+                  </Button>
+                  {draftPersonalizationId && (
+                    <Button size="sm" variant="ghost" onClick={handleClearDraftPersonalization}>
+                      New label
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs opacity-70">
+                  Give this configuration a name so you can restore it instantly later.
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" placeholder="Traveler" value={profile.name}
-                    onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} />
+                  <Input
+                    id="name"
+                    placeholder="Traveler"
+                    value={draftProfile.name}
+                    onChange={(e) => setDraftProfile((p) => ({ ...p, name: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="birthdate">Birthdate</Label>
-                  <Input id="birthdate" type="date" value={profile.birthdate}
-                    onChange={(e) => setProfile((p) => ({ ...p, birthdate: e.target.value }))} />
+                  <Input
+                    id="birthdate"
+                    type="date"
+                    value={draftProfile.birthdate}
+                    onChange={(e) => setDraftProfile((p) => ({ ...p, birthdate: e.target.value }))}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="birthTime">Birth time (optional)</Label>
-                  <Input id="birthTime" type="time" value={profile.birthTime}
-                    onChange={(e) => setProfile((p) => ({ ...p, birthTime: e.target.value }))} />
+                  <Input
+                    id="birthTime"
+                    type="time"
+                    value={draftProfile.birthTime}
+                    onChange={(e) => setDraftProfile((p) => ({ ...p, birthTime: e.target.value }))}
+                  />
                   <p className="text-xs opacity-70 mt-1">Add it if you know the local time; blank keeps things gently vague.</p>
                 </div>
                 <div>
                   <Label htmlFor="location">Location (optional)</Label>
-                  <Input id="location" placeholder="City, region" value={profile.location}
-                    onChange={(e) => setProfile((p) => ({ ...p, location: e.target.value }))} />
+                  <Input
+                    id="location"
+                    placeholder="City, region"
+                    value={draftProfile.location}
+                    onChange={(e) => setDraftProfile((p) => ({ ...p, location: e.target.value }))}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="favoriteNumber">Favorite number</Label>
-                  <Input id="favoriteNumber" inputMode="numeric" placeholder="7"
-                    value={profile.favoriteNumber}
-                    onChange={(e) => setProfile((p) => ({ ...p, favoriteNumber: e.target.value }))} />
+                  <Input
+                    id="favoriteNumber"
+                    inputMode="numeric"
+                    placeholder="7"
+                    value={draftProfile.favoriteNumber}
+                    onChange={(e) => setDraftProfile((p) => ({ ...p, favoriteNumber: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <Label>Theme</Label>
-                  <Select value={profile.theme} onValueChange={(v: Profile["theme"]) => setProfile((p) => ({ ...p, theme: v }))}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Theme" /></SelectTrigger>
+                  <Select
+                    value={draftProfile.theme}
+                    onValueChange={(v: Profile["theme"]) => setDraftProfile((p) => ({ ...p, theme: v }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Theme" />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Serene">Serene</SelectItem>
                       <SelectItem value="Mystic">Mystic</SelectItem>
@@ -1005,25 +1376,40 @@ export default function DailyDivinationApp() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="readingDate">Reading date (optional)</Label>
-                  <Input id="readingDate" type="date" value={profile.readingDate}
-                    onChange={(e) => setProfile((p) => ({ ...p, readingDate: e.target.value }))} />
+                  <Input
+                    id="readingDate"
+                    type="date"
+                    value={draftProfile.readingDate}
+                    onChange={(e) => setDraftProfile((p) => ({ ...p, readingDate: e.target.value }))}
+                  />
                   <p className="text-xs opacity-70 mt-1">Leave blank to anchor to today’s date automatically.</p>
                 </div>
                 <div>
                   <Label htmlFor="readingTime">Reading time (optional)</Label>
-                  <Input id="readingTime" type="time" value={profile.readingTime}
-                    onChange={(e) => setProfile((p) => ({ ...p, readingTime: e.target.value }))} />
+                  <Input
+                    id="readingTime"
+                    type="time"
+                    value={draftProfile.readingTime}
+                    onChange={(e) => setDraftProfile((p) => ({ ...p, readingTime: e.target.value }))}
+                  />
                   <p className="text-xs opacity-70 mt-1">Leave blank to capture the moment you open the app.</p>
                 </div>
               </div>
               <div>
                 <Label>Focus (override)</Label>
-                <Select value={profile.focus} onValueChange={(v: Profile["focus"]) => setProfile((p) => ({ ...p, focus: v }))}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Auto" /></SelectTrigger>
+                <Select
+                  value={draftProfile.focus}
+                  onValueChange={(v: Profile["focus"]) => setDraftProfile((p) => ({ ...p, focus: v }))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Auto" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Auto">Auto (let the three decide)</SelectItem>
                     {SIGNS.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1031,16 +1417,24 @@ export default function DailyDivinationApp() {
               </div>
               <div>
                 <Label htmlFor="intention">Intention (today)</Label>
-                <Textarea id="intention" placeholder="e.g., Make steady progress on my craft." rows={3}
-                  value={profile.intention}
-                  onChange={(e) => setProfile((p) => ({ ...p, intention: e.target.value }))} />
-                <p className="text-xs opacity-70 mt-1">Your name, birth details, favorite number, intention, location, and reading moment gently shape today’s seed.</p>
+                <Textarea
+                  id="intention"
+                  placeholder="e.g., Make steady progress on my craft."
+                  rows={3}
+                  value={draftProfile.intention}
+                  onChange={(e) => setDraftProfile((p) => ({ ...p, intention: e.target.value }))}
+                />
+                <p className="text-xs opacity-70 mt-1">
+                  Your name, birth details, favorite number, intention, location, and reading moment gently shape today’s seed.
+                </p>
               </div>
             </div>
             <SheetFooter className="mt-6">
               <div className="flex items-center gap-3 ml-auto">
-                <Button variant="ghost" onClick={() => setProfile(DEFAULT_PROFILE)}>Reset</Button>
-                <Button onClick={() => setOpen(false)}>Save & Refresh</Button>
+                <Button variant="ghost" onClick={handleResetProfile}>
+                  Reset
+                </Button>
+                <Button onClick={handleApplyDraftProfile}>Save & Refresh</Button>
               </div>
             </SheetFooter>
           </SheetContent>
