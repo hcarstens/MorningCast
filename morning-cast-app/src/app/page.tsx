@@ -619,7 +619,7 @@ function generateIChingReading(
   const relevantHexagrams = HEXAGRAM_LIST.filter((hex) => hex.focus.includes(sign));
   const primary = relevantHexagrams.length ? pick(rand, relevantHexagrams) : pick(rand, HEXAGRAM_LIST);
   const transition = pick(rand, primary.transitions);
-  const future = HEXAGRAMS[transition.to];
+  const future = HEXAGRAMS[transition.to as keyof typeof HEXAGRAMS];
   const movement = transition.shift === "yin-to-yang" ? "yin → yang" : "yang → yin";
   const movementTone =
     transition.shift === "yin-to-yang" ? "inviting gentle action" : "returning to calm receptivity";
@@ -894,33 +894,43 @@ function loadActivePersonalizationIdFromStorage(): string | null {
 }
 
 export default function DailyDivinationApp() {
-  const [savedPersonalizations, setSavedPersonalizations] = useState<SavedPersonalization[]>(() =>
-    loadSavedPersonalizationsFromStorage()
-  );
-  const [activePersonalizationId, setActivePersonalizationId] = useState<string | null>(() =>
-    loadActivePersonalizationIdFromStorage()
-  );
-  const [profile, setProfile] = useState<Profile>(() => {
-    if (typeof window === "undefined") return DEFAULT_PROFILE;
+  const [savedPersonalizations, setSavedPersonalizations] = useState<SavedPersonalization[]>([]);
+  const [activePersonalizationId, setActivePersonalizationId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [draftProfile, setDraftProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [draftPersonalizationId, setDraftPersonalizationId] = useState<string | null>(null);
+  const [personalizationLabel, setPersonalizationLabel] = useState<string>("");
+  const [open, setOpen] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  // Load data from localStorage after component mounts
+  useEffect(() => {
+    setIsClient(true);
     const storedSaved = loadSavedPersonalizationsFromStorage();
     const storedActiveId = loadActivePersonalizationIdFromStorage();
+
+    setSavedPersonalizations(storedSaved);
+    setActivePersonalizationId(storedActiveId);
+
     if (storedActiveId) {
       const match = storedSaved.find((entry) => entry.id === storedActiveId);
       if (match) {
-        return applyProfileDefaults(match.profile);
+        setProfile(applyProfileDefaults(match.profile));
+        setDraftProfile(applyProfileDefaults(match.profile));
+        return;
       }
     }
+
     try {
       const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
-      return raw ? applyProfileDefaults(JSON.parse(raw)) : DEFAULT_PROFILE;
+      const loadedProfile = raw ? applyProfileDefaults(JSON.parse(raw)) : DEFAULT_PROFILE;
+      setProfile(loadedProfile);
+      setDraftProfile(loadedProfile);
     } catch {
-      return DEFAULT_PROFILE;
+      setProfile(DEFAULT_PROFILE);
+      setDraftProfile(DEFAULT_PROFILE);
     }
-  });
-  const [draftProfile, setDraftProfile] = useState<Profile>({ ...profile });
-  const [draftPersonalizationId, setDraftPersonalizationId] = useState<string | null>(activePersonalizationId);
-  const [personalizationLabel, setPersonalizationLabel] = useState<string>("");
-  const [open, setOpen] = useState(false);
+  }, []);
 
   const activePersonalization = useMemo(() => {
     if (!activePersonalizationId) return null;
@@ -975,6 +985,7 @@ export default function DailyDivinationApp() {
   const rand = useMemo(() => seededRandom(seedKey), [seedKey]);
 
   const readings = useMemo(() => {
+    if (!isClient) return [];
     const handoffSeed = (personalizationForGenerators?.profile.intention || profile.intention || "the Tarot draw").trim() ||
       "the Tarot draw";
     const { reading: iching, context: ichingContext } = generateIChingReading(
@@ -999,9 +1010,12 @@ export default function DailyDivinationApp() {
       personalizationForGenerators
     );
     return [iching, tarot, horoscope];
-  }, [rand, profile, readingMoment, birthMoment, personalizationForGenerators]);
+  }, [rand, profile, readingMoment, birthMoment, personalizationForGenerators, isClient]);
 
-  const singleSign = useMemo(() => combineToSingleSign(readings, rand, profile.focus), [readings, rand, profile.focus]);
+  const singleSign = useMemo(() => {
+    if (!isClient || readings.length === 0) return "Love";
+    return combineToSingleSign(readings, rand, profile.focus);
+  }, [readings, rand, profile.focus, isClient]);
 
   const handleSavePersonalization = () => {
     const label = personalizationLabel.trim();
@@ -1086,7 +1100,7 @@ export default function DailyDivinationApp() {
       draftPersonalizationId && savedPersonalizations.find((item) => item.id === draftPersonalizationId);
     const matchesSaved = matchingSaved ? areProfilesEqual(matchingSaved.profile, snapshot) : false;
     setProfile(snapshot);
-    setActivePersonalizationId(matchesSaved ? matchingSaved!.id : null);
+    setActivePersonalizationId(matchesSaved && matchingSaved ? matchingSaved.id : null);
     setOpen(false);
   };
 
@@ -1108,23 +1122,24 @@ export default function DailyDivinationApp() {
     }
   };
 
-  const dateLabel = useMemo(
-    () =>
-      readingMoment.toLocaleDateString(undefined, {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      }),
-    [readingMoment]
-  );
-  const timeLabel = useMemo(
-    () =>
-      readingMoment.toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-    [readingMoment]
-  );
+  const dateLabel = useMemo(() => {
+    if (!isClient) return "Loading...";
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    };
+    return readingMoment.toLocaleDateString("en-US", options);
+  }, [readingMoment, isClient]);
+
+  const timeLabel = useMemo(() => {
+    if (!isClient) return "Loading...";
+    const options: Intl.DateTimeFormatOptions = {
+      hour: "numeric",
+      minute: "2-digit",
+    };
+    return readingMoment.toLocaleTimeString("en-US", options);
+  }, [readingMoment, isClient]);
   const locationLabel = profile.location.trim();
 
   const themeGradient = themeToGradient[profile.theme];
@@ -1136,17 +1151,21 @@ export default function DailyDivinationApp() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Sparkles className="w-6 h-6" />
-            <h1 className="text-2xl font-semibold tracking-tight">Daily Divination</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Daily Divination with Olivia</h1>
           </div>
-          <div className="flex items-center gap-2 text-sm opacity-80 flex-wrap justify-end">
+          <div className="flex items-center gap-2 text-sm opacity-80 flex-wrap justify-end" suppressHydrationWarning>
             <CalendarDays className="w-4 h-4" />
             <span>{dateLabel}</span>
-            <span className="opacity-60">•</span>
-            <span>{timeLabel}</span>
-            {locationLabel && (
+            {isClient && (
               <>
                 <span className="opacity-60">•</span>
-                <span>{locationLabel}</span>
+                <span>{timeLabel}</span>
+                {locationLabel && (
+                  <>
+                    <span className="opacity-60">•</span>
+                    <span>{locationLabel}</span>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -1192,30 +1211,56 @@ export default function DailyDivinationApp() {
 
       {/* Readings Grid */}
       <div className="max-w-5xl mx-auto px-4 mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        {readings.map((r) => (
-          <motion.div key={r.divinator} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-            <Card className="h-full bg-white/5 backdrop-blur border-white/10">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  {r.divinator === "Horoscope" && <Wand2 className="w-5 h-5" />} 
-                  {r.divinator === "Tarot" && <Sparkles className="w-5 h-5" />} 
-                  {r.divinator === "I Ching" && <Compass className="w-5 h-5" />} 
-                  {r.divinator}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="text-sm opacity-90">{r.headline}</div>
-                  <div className="text-sm opacity-80">{r.flavor}</div>
-                  {r.detail && <div className="text-xs opacity-70 leading-relaxed">{r.detail}</div>}
-                  <div className="mt-2">
-                    <Badge className="bg-white/10 border-white/20">{r.sign}</Badge>
+        {isClient && readings.length > 0 ? (
+          readings.map((r) => (
+            <motion.div key={r.divinator} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+              <Card className="h-full bg-white/5 backdrop-blur border-white/10">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    {r.divinator === "Horoscope" && <Wand2 className="w-5 h-5" />} 
+                    {r.divinator === "Tarot" && <Sparkles className="w-5 h-5" />} 
+                    {r.divinator === "I Ching" && <Compass className="w-5 h-5" />} 
+                    {r.divinator}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="text-sm opacity-90">{r.headline}</div>
+                    <div className="text-sm opacity-80">{r.flavor}</div>
+                    {r.detail && <div className="text-xs opacity-70 leading-relaxed">{r.detail}</div>}
+                    <div className="mt-2">
+                      <Badge className="bg-white/10 border-white/20">{r.sign}</Badge>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))
+        ) : (
+          // Loading skeleton for readings
+          Array.from({ length: 3 }, (_, i) => (
+            <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: i * 0.1 }}>
+              <Card className="h-full bg-white/5 backdrop-blur border-white/10">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <div className="w-5 h-5 bg-white/10 rounded animate-pulse"></div>
+                    <div className="w-20 h-6 bg-white/10 rounded animate-pulse"></div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="w-full h-4 bg-white/10 rounded animate-pulse"></div>
+                    <div className="w-3/4 h-4 bg-white/10 rounded animate-pulse"></div>
+                    <div className="w-1/2 h-3 bg-white/10 rounded animate-pulse"></div>
+                    <div className="mt-2">
+                      <div className="w-12 h-5 bg-white/10 rounded animate-pulse"></div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Personalize Button (bottom-right) */}

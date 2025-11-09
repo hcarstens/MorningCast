@@ -82,7 +82,7 @@ npm run dev
 
 ## Features
 
-- **Daily Divination**: Combines I Ching, Tarot, and Horoscope readings
+- **Daily Divination with Olivia**: Combines Horoscope, Tarot, and I Ching readings
 - **Personalization**: Name, birthdate, favorite number, intention, and theme
 - **Deterministic Randomness**: Consistent daily readings using seeded PRNG
 - **Responsive Design**: Works on desktop and mobile

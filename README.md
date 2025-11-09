@@ -1,6 +1,6 @@
 # MorningCast 🌅
 
-**Daily Divination Through Three Ancient Systems**
+**Daily Divination with Olivia**
 
 MorningCast is a unique divination app that combines wisdom from three ancient systems—I Ching, Tarot, and Horoscope—to provide you with personalized daily guidance. Each day, you receive three distinct readings that harmonize into a single guiding sign for your day.
 
