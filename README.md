@@ -53,6 +53,24 @@ npm install
 npm run dev
 ```
 
+### Configure Environment Keys (Bash)
+
+The divination APIs are only called when the corresponding API keys are present in the environment. To make the keys available in a Bash shell, export them before starting the development server:
+
+```bash
+# Run this from the repository root (or add to your shell profile)
+export OPENAI_API_KEY="sk-your-openai-key"
+export GROK_API_KEY="grok-your-grok-key"
+export GEMINI_API_KEY="your-gemini-key"
+
+# Optional model overrides
+export OPENAI_MODEL="gpt-4o-mini"
+export GROK_MODEL="grok-beta"
+export GEMINI_MODEL="gemini-1.5-flash"
+```
+
+If you prefer to keep the values between sessions, create `morning-cast-app/.env.local` with the same key/value pairs; Next.js will load them automatically.
+
 Visit `http://localhost:3000` to see your daily divination!
 
 ## 🏗️ Project Structure
