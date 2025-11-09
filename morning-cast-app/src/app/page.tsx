@@ -632,7 +632,7 @@ function generateIChingReading(
   const softenedCounsel = transition.counsel.replace(/\.$/, "");
   const tarotBridgeCue = `${tarotCue} while letting the ${movementTone} rhythm remind you to ${softenedCounsel.toLowerCase()}.`;
   const ethicalPrompt = `How could ${future.action} guide ${tarotHandoffSeed.toLowerCase()} today?`;
-  const detail = `Phase 1 · Ethical Transition — Anchor in how ${primary.name.toLowerCase()} becomes ${future.name.toLowerCase()}.
+  const detail = `Anchor in how ${primary.name.toLowerCase()} becomes ${future.name.toLowerCase()}.
 Carry ${primary.attribute} into the next draw and ${tarotBridgeCue} ${
     personalization
       ? `Personalization · “${personalization.label}” steadies how you listen for this shift.`
@@ -680,7 +680,7 @@ function generateTarotReading(
   const bridgeAction = `translate ${ichingContext.action} into language that honors ${ichingContext.counsel.toLowerCase()}`;
   const focusDual = `${focusCard.card.name} speaks in radiance as it ${focusCard.card.upright} and in whisper as it ${focusCard.card.soft}.`;
   const futureDual = `${futureCard.card.name} echoes with clarity when upright (${futureCard.card.upright}) and softens into ${futureCard.card.soft}.`;
-  const detail = `Phase 2 · Archetypal Elaboration — The I Ching framed the shift from ${
+  const detail = `The I Ching framed the shift from ${
     ichingContext.primary.name
   } to ${ichingContext.future.name}, asking for ${ichingContext.counsel.toLowerCase()}. ${focusDual} ${futureDual} Let ${
     focusCard.card.name
@@ -746,7 +746,7 @@ function generateHoroscopeReading(
   const intentionSource = personalization?.profile.intention ?? profile.intention;
   const sign = chooseSignForDivinator(rand, "Horoscope", intentionSource);
 
-  const detail = `Phase 3 · Integrative Horoscope — ${integrationAffirmation} ${brightLine} ${shadowLine} Reflection cues · “${
+  const detail = `${integrationAffirmation} ${brightLine} ${shadowLine} Reflection cues · “${
     reflectionPrompts[0]
   }” · “${reflectionPrompts[1]}”${
     personalization
@@ -781,6 +781,21 @@ function combineToSingleSign(readings: Reading[], rand: () => number, focus: Pro
   const max = Math.max(...Object.values(counts));
   const leaders = (Object.keys(counts) as SingleSign[]).filter((k) => counts[k] === max);
   return pick(rand, leaders);
+}
+
+function generateJournalingIdea(readings: Reading[], singleSign: SingleSign): string {
+  if (readings.length < 3) return "Reflect on how these insights might guide your day.";
+
+  const iching = readings.find(r => r.divinator === "I Ching");
+  const tarot = readings.find(r => r.divinator === "Tarot");
+  const horoscope = readings.find(r => r.divinator === "Horoscope");
+
+  // Extract key elements from each reading
+  const ichingAction = iching?.detail?.split('.')[0] || "this transition";
+  const tarotCard = tarot?.flavor?.split('·')[1]?.split('(')[0]?.trim() || "your guide";
+  const horoscopePrompt = horoscope?.detail?.split('Reflection cues ·')[1]?.split('·')[0]?.replace(/"/g, '') || "your inner wisdom";
+
+  return `How might ${ichingAction.toLowerCase()} guide your ${singleSign.toLowerCase()} journey, with ${tarotCard.toLowerCase()} as your ally and "${horoscopePrompt}" as your compass?`;
 }
 
 function dailySeed(profile: Profile, readingMoment: Date): string {
@@ -1017,6 +1032,11 @@ export default function DailyDivinationApp() {
     return combineToSingleSign(readings, rand, profile.focus);
   }, [readings, rand, profile.focus, isClient]);
 
+  const journalingIdea = useMemo(() => {
+    if (!isClient || readings.length === 0) return "Reflect on how these insights might guide your day.";
+    return generateJournalingIdea(readings, singleSign);
+  }, [readings, singleSign, isClient]);
+
   const handleSavePersonalization = () => {
     const label = personalizationLabel.trim();
     if (!label) return;
@@ -1202,7 +1222,7 @@ export default function DailyDivinationApp() {
                 ))}
               </div>
               <p className="mt-4 text-sm opacity-90">
-                Based on today’s three readings and your personalization settings.
+                {journalingIdea}
               </p>
             </CardContent>
           </Card>
