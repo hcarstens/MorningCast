@@ -2,16 +2,16 @@
 
 **Daily Divination Through Three Ancient Systems**
 
-MorningCast is a unique divination app that combines wisdom from three ancient systems—Horoscope, Tarot, and I Ching—to provide you with personalized daily guidance. Each day, you receive three distinct readings that harmonize into a single guiding sign for your day.
+MorningCast is a unique divination app that combines wisdom from three ancient systems—I Ching, Tarot, and Horoscope—to provide you with personalized daily guidance. Each day, you receive three distinct readings that harmonize into a single guiding sign for your day.
 
 ![Daily Divination Demo](https://img.shields.io/badge/Demo-Live-brightgreen) ![Next.js](https://img.shields.io/badge/Next.js-15-black) ![React](https://img.shields.io/badge/React-19-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 
 ## ✨ Features
 
 ### 🔮 Three Divination Systems
-- **Horoscope**: Provides contextual emotional guidance with celestial wisdom
-- **Tarot**: Offers situational mapping through archetypal symbolism  
 - **I Ching**: Delivers ethical transition advice aligned with natural law
+- **Tarot**: Offers situational mapping through archetypal symbolism
+- **Horoscope**: Provides contextual emotional guidance with celestial wisdom
 
 ### 🎯 Single Daily Sign
 Your three readings combine into one of four guiding signs:
@@ -84,7 +84,7 @@ MorningCast/
 ## 🎮 How to Use
 
 1. **Visit the App**: Open `http://localhost:3000` in your browser
-2. **View Your Readings**: See today's Horoscope, Tarot, and I Ching readings
+2. **View Your Readings**: See today's I Ching, Tarot, and Horoscope readings
 3. **Check Your Sign**: Your combined daily sign appears at the top
 4. **Personalize** (optional): Click the "Personalize" button to:
    - Set your name, birthdate, and favorite number
@@ -139,4 +139,4 @@ MIT License - feel free to fork and experiment!
 
 ---
 
-*"Every day you receive three readings — Horoscope, Tarot, and I Ching — which combine into your single sign."*
+*"Every day you receive three readings — I Ching, Tarot, and Horoscope — which combine into your single sign."*

@@ -42,7 +42,7 @@ function seededRandom(seed: string) {
 // --- Types --- //
 const SIGNS = ["Love", "Fortune", "Fame", "Adventure"] as const;
 export type SingleSign = typeof SIGNS[number];
-export type Divinator = "Horoscope" | "Tarot" | "I Ching";
+export type Divinator = "I Ching" | "Tarot" | "Horoscope";
 
 interface Reading {
   divinator: Divinator;
@@ -193,7 +193,7 @@ export default function DailyDivinationApp() {
             <span>{new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</span>
           </div>
         </div>
-        <p className="mt-1 text-sm opacity-80">Every day you receive three readings — Horoscope, Tarot, and I Ching — which combine into your single sign.</p>
+        <p className="mt-1 text-sm opacity-80">Every day you receive three readings — I Ching, Tarot, and Horoscope — which combine into your single sign.</p>
       </div>
 
       {/* Top: Single Sign */}
