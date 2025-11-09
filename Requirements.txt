@@ -82,7 +82,7 @@ npm run dev
 
 ## Features
 
-- **Daily Divination**: Combines Horoscope, Tarot, and I Ching readings
+- **Daily Divination**: Combines I Ching, Tarot, and Horoscope readings
 - **Personalization**: Name, birthdate, favorite number, intention, and theme
 - **Deterministic Randomness**: Consistent daily readings using seeded PRNG
 - **Responsive Design**: Works on desktop and mobile
