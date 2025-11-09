@@ -917,6 +917,12 @@ export default function DailyDivinationApp() {
   const [personalizationLabel, setPersonalizationLabel] = useState<string>("");
   const [open, setOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [enhancedReadings, setEnhancedReadings] = useState<Reading[] | null>(null);
+  const [enhancedSingleSign, setEnhancedSingleSign] = useState<SingleSign | null>(null);
+  const [enhancedJournalingIdea, setEnhancedJournalingIdea] = useState<string | null>(null);
+  const [enhancementModels, setEnhancementModels] = useState<string[]>([]);
+  const [enhancementStatus, setEnhancementStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [enhancementError, setEnhancementError] = useState<string | null>(null);
 
   // Load data from localStorage after component mounts
   useEffect(() => {
@@ -1036,6 +1042,75 @@ export default function DailyDivinationApp() {
     if (!isClient || readings.length === 0) return "Reflect on how these insights might guide your day.";
     return generateJournalingIdea(readings, singleSign);
   }, [readings, singleSign, isClient]);
+
+  useEffect(() => {
+    if (!isClient || readings.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    setEnhancementStatus("loading");
+    setEnhancementError(null);
+    setEnhancedReadings(null);
+    setEnhancedSingleSign(null);
+    setEnhancedJournalingIdea(null);
+    setEnhancementModels([]);
+
+    const payload = {
+      profile,
+      readings,
+      singleSign,
+      journalingIdea,
+      personalizationLabel: personalizationForGenerators?.label ?? null,
+    };
+
+    const run = async () => {
+      try {
+        const response = await fetch("/api/enhance-readings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || "Failed to enhance readings");
+        }
+
+        const data = await response.json();
+        if (cancelled) return;
+
+        if (Array.isArray(data.readings) && data.readings.length) {
+          setEnhancedReadings(data.readings);
+        }
+        if (data.singleSign) {
+          setEnhancedSingleSign(data.singleSign as SingleSign);
+        }
+        if (typeof data.journalingIdea === "string") {
+          setEnhancedJournalingIdea(data.journalingIdea);
+        }
+        if (Array.isArray(data.models)) {
+          setEnhancementModels(data.models as string[]);
+        }
+        setEnhancementStatus("idle");
+      } catch (error) {
+        if (cancelled) return;
+        if ((error as Error).name === "AbortError") return;
+        setEnhancementStatus("error");
+        setEnhancementError((error as Error).message || "Unknown enhancement error");
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [isClient, readings, singleSign, journalingIdea, profile, personalizationForGenerators]);
 
   const handleSavePersonalization = () => {
     const label = personalizationLabel.trim();
@@ -1163,6 +1238,15 @@ export default function DailyDivinationApp() {
   const locationLabel = profile.location.trim();
 
   const themeGradient = themeToGradient[profile.theme];
+  const displayedReadings = useMemo(() => {
+    if (enhancedReadings && enhancedReadings.length === readings.length) {
+      return enhancedReadings;
+    }
+    return readings;
+  }, [enhancedReadings, readings]);
+  const displayedSingleSign = enhancedSingleSign ?? singleSign;
+  const displayedJournalingIdea = enhancedJournalingIdea ?? journalingIdea;
+  const isEnhancing = enhancementStatus === "loading";
 
   return (
     <div className={`min-h-screen w-full bg-gradient-to-b ${themeGradient} text-slate-100`}>      
@@ -1200,7 +1284,7 @@ export default function DailyDivinationApp() {
             <CardHeader className="flex items-center sm:flex-row sm:justify-between gap-3">
               <CardTitle className="flex items-center gap-3 text-xl">
                 <Badge variant="secondary" className="text-base px-3 py-1 rounded-2xl bg-white/10 border border-white/20">
-                  {singleSign}
+                  {displayedSingleSign}
                 </Badge>
                 <span className="opacity-90">Your Single Sign for Today</span>
               </CardTitle>
@@ -1210,20 +1294,40 @@ export default function DailyDivinationApp() {
               </div>
             </CardHeader>
             <CardContent className="pb-6">
+              <div className="flex flex-wrap gap-2 mb-4">
+                {isEnhancing && (
+                  <Badge variant="outline" className="bg-white/10 border-white/30 text-xs font-normal">
+                    Synthesizing flow via OpenAI • Grok • Gemini
+                  </Badge>
+                )}
+                {!isEnhancing && enhancementModels.length > 0 && (
+                  <Badge variant="outline" className="bg-white/10 border-white/30 text-xs font-normal">
+                    Heuristic blend · {enhancementModels.join(" + ")}
+                  </Badge>
+                )}
+                {enhancementStatus === "error" && enhancementError && (
+                  <Badge variant="outline" className="bg-rose-500/20 border-rose-300/50 text-rose-200 text-xs font-normal">
+                    Blend paused · {enhancementError}
+                  </Badge>
+                )}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {SIGNS.map((s) => (
-                  <div key={s} className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${s === singleSign ? "border-white/60 bg-white/10" : "border-white/10 bg-white/5 opacity-80"}`}>
-                    {s === "Love" && <Heart className="w-4 h-4" />} 
-                    {s === "Fortune" && <TrendingUp className="w-4 h-4" />} 
-                    {s === "Fame" && <Star className="w-4 h-4" />} 
+                  <div
+                    key={s}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${
+                      s === displayedSingleSign ? "border-white/60 bg-white/10" : "border-white/10 bg-white/5 opacity-80"
+                    }`}
+                  >
+                    {s === "Love" && <Heart className="w-4 h-4" />}
+                    {s === "Fortune" && <TrendingUp className="w-4 h-4" />}
+                    {s === "Fame" && <Star className="w-4 h-4" />}
                     {s === "Adventure" && <Map className="w-4 h-4" />} 
                     <span className="text-sm">{s}</span>
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-sm opacity-90">
-                {journalingIdea}
-              </p>
+              <p className="mt-4 text-sm opacity-90">{displayedJournalingIdea}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -1231,8 +1335,8 @@ export default function DailyDivinationApp() {
 
       {/* Readings Grid */}
       <div className="max-w-5xl mx-auto px-4 mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        {isClient && readings.length > 0 ? (
-          readings.map((r) => (
+        {isClient && displayedReadings.length > 0 ? (
+          displayedReadings.map((r) => (
             <motion.div key={r.divinator} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
               <Card className="h-full bg-white/5 backdrop-blur border-white/10">
                 <CardHeader>

@@ -91,3 +91,4 @@ pids
 # Temporary folders
 tmp/
 temp/
+!morning-cast-app/src/lib/
