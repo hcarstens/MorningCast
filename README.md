@@ -139,6 +139,50 @@ Clean neutrals for focused clarity
 - **Icons**: Lucide React
 - **Deployment**: Vercel-ready
 
+## 🛰️ Server-Side API
+
+MorningCast ships with two Next.js Route Handlers that power the enhanced divination experience. Both routes live under
+`morning-cast-app/src/app/api` and return JSON responses tailored for downstream consumers.
+
+### `/api/enhance-readings` (POST)
+
+Pipeline endpoint that accepts the raw divination bundle from the client and runs a three-model orchestration pass:
+
+- **Request Body**
+  - `readings` *(required)*: Array of three readings containing `divinator`, `headline`, `flavor`, optional `detail`, and `sign`.
+  - `singleSign` *(required)*: One of `Love`, `Fortune`, `Fame`, or `Adventure`.
+  - `journalingIdea` *(required)*: Seed journaling prompt from the client.
+  - `profile` *(optional)*: Object with viewer metadata used for prompt context.
+  - `personalizationLabel` *(optional)*: Short string describing any personalization mode currently active.
+- **Processing**
+  1. OpenAI blends the readings for narrative Flow, enforcing schema correctness with structured outputs.
+  2. Grok transforms tone into a confident, witty Voice while preserving divination guardrails.
+  3. Gemini mirrors the insights into sensory Originality and acknowledges model collaboration.
+- **Response**
+  - `readings`: Enhanced readings, sanitized against the JSON schema contract.
+  - `singleSign`: Final guiding sign (identical to the input unless a model violates constraints).
+  - `journalingIdea`: Refined journaling prompt.
+  - `models`: Array documenting which models responded successfully (`openai:*`, `grok:*`, `gemini:*`).
+
+### `/api/x402/horoscope` (GET, POST)
+
+Autonomous-agent friendly horoscope generator designed for the "x402" heuristic contract.
+
+- **GET**: Returns a capability descriptor with the schema version, heuristic guardrails, and an example request payload.
+- **POST**
+  - **Request Body** *(JSON)*
+    - `agent`: Identifier and optional label for the requesting agent.
+    - `profile`: Optional profile including `name`, `sunSign`, `focus`, `intention`, `timezone`, `locale`, and `seedModifier`.
+    - `context`: Optional metadata for request tracking.
+  - **Processing**
+    - Deterministic RNG seeded by the day, agent ID, sun sign, intention, and modifiers ensures repeatable outputs.
+    - Heuristic bundles enforce Barnum-style validation, dual polarity traits, ethical tone, and short-term guidance windows.
+  - **Response**
+    - `schema`, `generatedAt`, and `seed` metadata for observability.
+    - Echoed `agent` and sanitized `profile` objects.
+    - `heuristics` and `heuristicAlgebra` arrays documenting the applied governance contract.
+    - `horoscope`: Fully composed horoscope bundle with validation, action, future anchor, summary, journal prompt, and the resolved sign.
+
 ## 📚 Documentation
 
 The project includes extensive documentation of the divination systems:
