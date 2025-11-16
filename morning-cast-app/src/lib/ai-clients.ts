@@ -27,7 +27,7 @@ export async function callOpenAI(params: {
   temperature?: number;
   maxTokens?: number;
 }): Promise<{ content: string; model: string } | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY || process.env.CHATGPT_API_KEY;
   if (!apiKey) {
     return null;
   }
@@ -70,11 +70,11 @@ export async function callGrok(params: {
   temperature?: number;
   maxTokens?: number;
 }): Promise<{ content: string; model: string } | null> {
-  const apiKey = process.env.GROK_API_KEY;
+  const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
   if (!apiKey) {
     return null;
   }
-  const model = params.model ?? process.env.GROK_MODEL ?? "grok-beta";
+  const model = params.model ?? process.env.GROK_MODEL ?? "grok-4";
   const response = await fetch("https://api.x.ai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -112,7 +112,7 @@ export async function callGemini(params: {
   temperature?: number;
   maxOutputTokens?: number;
 }): Promise<{ content: string; model: string } | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
     return null;
   }

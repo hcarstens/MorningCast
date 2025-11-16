@@ -633,11 +633,7 @@ function generateIChingReading(
   const tarotBridgeCue = `${tarotCue} while letting the ${movementTone} rhythm remind you to ${softenedCounsel.toLowerCase()}.`;
   const ethicalPrompt = `How could ${future.action} guide ${tarotHandoffSeed.toLowerCase()} today?`;
   const detail = `Anchor in how ${primary.name.toLowerCase()} becomes ${future.name.toLowerCase()}.
-Carry ${primary.attribute} into the next draw and ${tarotBridgeCue} ${
-    personalization
-      ? `Personalization · “${personalization.label}” steadies how you listen for this shift.`
-      : ""
-  }`;
+Carry ${primary.attribute} into the next draw and ${tarotBridgeCue}`;
 
   const reading: Reading = {
     divinator: "I Ching",
@@ -684,13 +680,9 @@ function generateTarotReading(
     ichingContext.primary.name
   } to ${ichingContext.future.name}, asking for ${ichingContext.counsel.toLowerCase()}. ${focusDual} ${futureDual} Let ${
     focusCard.card.name
-  } translate ${ichingContext.movementTone} into action while ${futureCard.card.name} ${futureTone} as you sit with the question “${
+  } translate ${ichingContext.movementTone} into action while ${futureCard.card.name} ${futureTone} as you sit with the question "${
     ichingContext.ethicalPrompt
-  }” — carry this story forward by planning how you’ll ${bridgeAction}.${
-    personalization
-      ? ` Personalization · “${personalization.label}” keeps the spread aligned with the tone you saved.`
-      : ""
-  }`;
+  }" — carry this story forward by planning how you'll ${bridgeAction}.`;
 
   const reading: Reading = {
     divinator: "Tarot",
@@ -733,7 +725,7 @@ function generateHoroscopeReading(
   const locationClause = location ? ` while you move through ${location}` : "";
   const validation = `Your ${trait.bright} yet ${trait.tension} nature${
     birthRef ? `, rooted in your ${birthRef},` : ""
-  } has been sensing how ${ichingContext.primary.name.toLowerCase()} becomes ${ichingContext.future.name.toLowerCase()} amid ${context}${locationClause}.`;
+  } has been sensing how ${ichingContext.primary.name.toLowerCase()} becomes ${ichingContext.future.name.toLowerCase()} amid ${context}.`;
 
   const integrationAffirmation = `Let ${tarotContext.focusCard.card.name} keep that shift conversational so ${tarotContext.futureCard.card.name} can ${tarotContext.futureTone.toLowerCase()} before ${dayPhase.futureWindow}.`;
   const brightLine = `Bright path · Share ${tarotContext.dualPerspective.bright} with ${agent} to reinforce ${ichingContext.action}.`;
@@ -746,13 +738,9 @@ function generateHoroscopeReading(
   const intentionSource = personalization?.profile.intention ?? profile.intention;
   const sign = chooseSignForDivinator(rand, "Horoscope", intentionSource);
 
-  const detail = `${integrationAffirmation} ${brightLine} ${shadowLine} Reflection cues · “${
+  const detail = `${integrationAffirmation} ${brightLine} ${shadowLine} Reflection cues · "${
     reflectionPrompts[0]
-  }” · “${reflectionPrompts[1]}”${
-    personalization
-      ? ` Personalization · “${personalization.label}” keeps this integration tuned to your saved cadence.`
-      : ""
-  }`;
+  }" · "${reflectionPrompts[1]}"`;
 
   const reading: Reading = {
     divinator: "Horoscope",
@@ -783,19 +771,15 @@ function combineToSingleSign(readings: Reading[], rand: () => number, focus: Pro
   return pick(rand, leaders);
 }
 
-function generateJournalingIdea(readings: Reading[], singleSign: SingleSign): string {
-  if (readings.length < 3) return "Reflect on how these insights might guide your day.";
+function generateJournalingIdea(readings: Reading[]): string {
+  if (readings.length < 3) return "Journaling: Reflect on how these insights might guide your day.";
 
-  const iching = readings.find(r => r.divinator === "I Ching");
-  const tarot = readings.find(r => r.divinator === "Tarot");
   const horoscope = readings.find(r => r.divinator === "Horoscope");
 
-  // Extract key elements from each reading
-  const ichingAction = iching?.detail?.split('.')[0] || "this transition";
-  const tarotCard = tarot?.flavor?.split('·')[1]?.split('(')[0]?.trim() || "your guide";
-  const horoscopePrompt = horoscope?.detail?.split('Reflection cues ·')[1]?.split('·')[0]?.replace(/"/g, '') || "your inner wisdom";
+  // Extract the first reflection prompt from horoscope
+  const horoscopePrompt = horoscope?.detail?.split('Reflection cues · "')[1]?.split('"')[0] || "How might these insights guide your day?";
 
-  return `How might ${ichingAction.toLowerCase()} guide your ${singleSign.toLowerCase()} journey, with ${tarotCard.toLowerCase()} as your ally and "${horoscopePrompt}" as your compass?`;
+  return `Journaling: ${horoscopePrompt}`;
 }
 
 function dailySeed(profile: Profile, readingMoment: Date): string {
@@ -1039,9 +1023,9 @@ export default function DailyDivinationApp() {
   }, [readings, rand, profile.focus, isClient]);
 
   const journalingIdea = useMemo(() => {
-    if (!isClient || readings.length === 0) return "Reflect on how these insights might guide your day.";
-    return generateJournalingIdea(readings, singleSign);
-  }, [readings, singleSign, isClient]);
+    if (!isClient || readings.length === 0) return "Journaling: Reflect on how these insights might guide your day.";
+    return generateJournalingIdea(readings);
+  }, [readings, isClient]);
 
   useEffect(() => {
     if (!isClient || readings.length === 0) {
@@ -1253,9 +1237,14 @@ export default function DailyDivinationApp() {
       {/* Header */}
       <div className="max-w-5xl mx-auto px-4 pt-10 pb-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Sparkles className="w-6 h-6" />
-            <h1 className="text-2xl font-semibold tracking-tight">Daily Divination with Olivia</h1>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-6 h-6" />
+              <h1 className="text-2xl font-semibold tracking-tight">Daily Divination with Olivia</h1>
+            </div>
+            {personalizationForGenerators && (
+              <p className="text-sm opacity-80">{personalizationForGenerators.label}, {displayedSingleSign} is your byword today</p>
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm opacity-80 flex-wrap justify-end" suppressHydrationWarning>
             <CalendarDays className="w-4 h-4" />
@@ -1274,7 +1263,6 @@ export default function DailyDivinationApp() {
             )}
           </div>
         </div>
-        <p className="mt-1 text-sm opacity-80">Every day you receive three readings — I Ching, Tarot, and Horoscope — which combine into your single sign.</p>
       </div>
 
       {/* Top: Single Sign */}
@@ -1294,23 +1282,9 @@ export default function DailyDivinationApp() {
               </div>
             </CardHeader>
             <CardContent className="pb-6">
-              <div className="flex flex-wrap gap-2 mb-4">
-                {isEnhancing && (
-                  <Badge variant="outline" className="bg-white/10 border-white/30 text-xs font-normal">
-                    Synthesizing flow via OpenAI • Grok • Gemini
-                  </Badge>
-                )}
-                {!isEnhancing && enhancementModels.length > 0 && (
-                  <Badge variant="outline" className="bg-white/10 border-white/30 text-xs font-normal">
-                    Heuristic blend · {enhancementModels.join(" + ")}
-                  </Badge>
-                )}
-                {enhancementStatus === "error" && enhancementError && (
-                  <Badge variant="outline" className="bg-rose-500/20 border-rose-300/50 text-rose-200 text-xs font-normal">
-                    Blend paused · {enhancementError}
-                  </Badge>
-                )}
-              </div>
+              {personalizationForGenerators && (
+                <p className="mb-4 text-sm opacity-90">{personalizationForGenerators.label}, {displayedSingleSign} is your key to today</p>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {SIGNS.map((s) => (
                   <div

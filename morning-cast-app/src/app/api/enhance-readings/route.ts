@@ -94,7 +94,8 @@ const RESPONSE_SCHEMA: JsonSchemaEnvelope = {
 
 function isReading(candidate: unknown): candidate is Reading {
   return (
-    candidate &&
+    candidate !== null &&
+    candidate !== undefined &&
     typeof candidate === "object" &&
     (candidate as Reading).divinator !== undefined &&
     ((candidate as Reading).divinator === "I Ching" ||
@@ -157,9 +158,17 @@ Apply ¬ to flip cautious tone into confident, witty Voice while keeping alignme
 function buildGeminiPrompt(
   context: PromptContext,
   base: PipelineDraft,
-  flowDraft: PipelineDraft,
-  voiceDraft: PipelineDraft
+  flowDraft?: PipelineDraft,
+  voiceDraft?: PipelineDraft
 ): string {
+  if (!flowDraft && !voiceDraft) {
+    // Initial Gemini call (default LLM)
+    return `Baseline divinations (Originality focus stage):
+${JSON.stringify({ profile: context.profile, personalizationLabel: context.personalizationLabel, base }, null, 2)}
+
+Apply ∼ to translate the insights into vivid, sensory Originality. Keep each sign identical, respect safety, and limit each flavor+detail bundle to under 90 words. Return JSON matching the schema.`;
+  }
+
   return `You have baseline, Flow-optimized, and Voice-energized readings.
 ${JSON.stringify(
     { profile: context.profile, personalizationLabel: context.personalizationLabel, base, flowDraft, voiceDraft },
@@ -222,6 +231,24 @@ export async function POST(request: NextRequest) {
   let workingDraft: PipelineDraft = baseDraft;
   const modelsUsed: string[] = [];
 
+  // Try Gemini first (default LLM)
+  try {
+    const gemini = await callGemini({
+      systemPrompt: PROMPT_HEURISTICS,
+      userPrompt: buildGeminiPrompt(promptContext, baseDraft),
+    });
+    if (gemini) {
+      const parsed = sanitizeDraft(extractJsonObject(gemini.content), workingDraft);
+      workingDraft = parsed;
+      modelsUsed.push(`gemini:${gemini.model}`);
+    }
+  } catch (error) {
+    console.error("Gemini enhancement error", error);
+  }
+
+  const originalityDraft = workingDraft;
+
+  // Try OpenAI for Flow optimization
   try {
     const openAi = await callOpenAI({
       systemPrompt: PROMPT_HEURISTICS,
@@ -239,6 +266,7 @@ export async function POST(request: NextRequest) {
 
   const flowDraft = workingDraft;
 
+  // Try Grok for Voice enhancement
   try {
     const grok = await callGrok({
       systemPrompt: PROMPT_HEURISTICS,
@@ -251,22 +279,6 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("Grok enhancement error", error);
-  }
-
-  const voiceDraft = workingDraft;
-
-  try {
-    const gemini = await callGemini({
-      systemPrompt: PROMPT_HEURISTICS,
-      userPrompt: buildGeminiPrompt(promptContext, baseDraft, flowDraft, voiceDraft),
-    });
-    if (gemini) {
-      const parsed = sanitizeDraft(extractJsonObject(gemini.content), workingDraft);
-      workingDraft = parsed;
-      modelsUsed.push(`gemini:${gemini.model}`);
-    }
-  } catch (error) {
-    console.error("Gemini enhancement error", error);
   }
 
   return NextResponse.json({
